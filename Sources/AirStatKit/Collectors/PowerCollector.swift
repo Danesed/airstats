@@ -29,6 +29,10 @@ public final class PowerCollector: MetricSource {
     /// a handful of property reads rather than a registry match. `IO_OBJECT_NULL` on
     /// desktops, which is a supported configuration rather than an error.
     private var battery: io_service_t = IO_OBJECT_NULL
+    /// Its `AppleSmartBatteryPack` child, which is where macOS 27 moved the pack
+    /// temperature and failure status. `IO_OBJECT_NULL` on releases that never split
+    /// it out.
+    private var pack: io_service_t = IO_OBJECT_NULL
     /// A Mac does not grow a battery mid-session, so a miss is remembered rather than
     /// re-matched every five seconds for the life of the process.
     private var didLookUpBattery = false
@@ -51,6 +55,10 @@ public final class PowerCollector: MetricSource {
         if battery != IO_OBJECT_NULL {
             IOObjectRelease(battery)
             battery = IO_OBJECT_NULL
+        }
+        if pack != IO_OBJECT_NULL {
+            IOObjectRelease(pack)
+            pack = IO_OBJECT_NULL
         }
         didLookUpBattery = false
         designCapacity = nil
@@ -259,7 +267,7 @@ public final class PowerCollector: MetricSource {
         // Centi-Celsius. Anything outside a range a lithium pack can physically be in
         // means the key is not what it is assumed to be on this hardware, so it is
         // dropped rather than displayed.
-        if let raw = number("Temperature")?.doubleValue {
+        if let raw = number("Temperature")?.doubleValue ?? packNumber("Temperature")?.doubleValue {
             let celsius = raw / 100
             if celsius > -40, celsius < 100 { snapshot.temperatureCelsius = celsius }
         }
@@ -281,16 +289,28 @@ public final class PowerCollector: MetricSource {
     }
 
     private func applyHealth(to snapshot: inout PowerSnapshot, source: [String: Any]?) {
-        if designCapacity == nil { designCapacity = number("DesignCapacity")?.intValue }
+        // macOS 27 dropped the three capacity keys from the node's top level. The same
+        // figures live on in its BatteryData dictionary under new names: FullChargeCapacity
+        // is AppleRawMaxCapacity (it still adds PackReserve up to NominalChargeCapacity)
+        // and RemainingCapacity is AppleRawCurrentCapacity. Read only when a top-level key
+        // is missing, so older releases pay nothing for the copy.
+        lazy var gauge = dictionary("BatteryData")
+        func gaugeNumber(_ key: String) -> Int? { (gauge?[key] as? NSNumber)?.intValue }
+
+        if designCapacity == nil {
+            designCapacity = number("DesignCapacity")?.intValue ?? gaugeNumber("DesignCapacity")
+        }
         snapshot.designCapacitymAh = designCapacity.flatMap { $0 > 0 ? $0 : nil }
         snapshot.maxCapacitymAh = number("AppleRawMaxCapacity")?.intValue
+            ?? gaugeNumber("FullChargeCapacity")
         snapshot.currentCapacitymAh = number("AppleRawCurrentCapacity")?.intValue
+            ?? gaugeNumber("RemainingCapacity")
         snapshot.cycleCount = number("CycleCount")?.intValue
 
         // Derived from the two fields published above rather than from a separately
         // chosen key, so healthPercent cannot drift out of step with the capacities
         // shown next to it. All three come from one scale: AppleRawCurrentCapacity,
-        // AppleRawMaxCapacity and DesignCapacity.
+        // AppleRawMaxCapacity and DesignCapacity, or their BatteryData equivalents.
         //
         // This reads about 3 points below the "Maximum Capacity" System Information
         // shows, and the gap is understood rather than unexplained. Apple's figure is
@@ -316,7 +336,8 @@ public final class PowerCollector: MetricSource {
         if let condition = source?[kIOPSBatteryHealthConditionKey] as? String, !condition.isEmpty {
             return condition
         }
-        if let failure = number("PermanentFailureStatus")?.intValue, failure != 0 {
+        if let failure = (number("PermanentFailureStatus") ?? packNumber("PermanentFailureStatus"))?.intValue,
+           failure != 0 {
             return kIOPSPermanentFailureValue
         }
         switch source?[kIOPSBatteryHealthKey] as? String {
@@ -357,7 +378,21 @@ public final class PowerCollector: MetricSource {
         didLookUpBattery = true
         battery = IOServiceGetMatchingService(kIOMainPortDefault,
                                               IOServiceMatching("AppleSmartBattery"))
+        if pack != IO_OBJECT_NULL { IOObjectRelease(pack) }
+        pack = IOServiceGetMatchingService(kIOMainPortDefault,
+                                           IOServiceMatching("AppleSmartBatteryPack"))
         designCapacity = number("DesignCapacity")?.intValue
+    }
+
+    /// A key from the pack's BatteryData dictionary, the only place macOS 27 still
+    /// publishes the pack temperature and permanent failure status.
+    private func packNumber(_ key: String) -> NSNumber? {
+        guard pack != IO_OBJECT_NULL,
+              let data = IORegistryEntryCreateCFProperty(pack, "BatteryData" as CFString,
+                                                         kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? [String: Any]
+        else { return nil }
+        return data[key] as? NSNumber
     }
 
     /// Individual property reads rather than `IORegistryEntryCreateCFProperties`: the
