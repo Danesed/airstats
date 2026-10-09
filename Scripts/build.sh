@@ -21,6 +21,15 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 
 cp "$BIN_DIR/AirStats" "$APP/Contents/MacOS/AirStats"
+
+# SwiftPM's swiftbuild backend (the default from Xcode 27) links with the deployment
+# target as the SDK version, so the binary claims it was built against macOS 14.
+# AppKit reads that claim to decide whether the app gets the current system design or
+# the compatibility look, so it is put back to the SDK the build actually used.
+MIN_OS="$(vtool -show-build "$APP/Contents/MacOS/AirStats" | awk '/minos/ { print $2 }')"
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+vtool -set-build-version macos "$MIN_OS" "$SDK_VERSION" -replace \
+  -output "$APP/Contents/MacOS/AirStats" "$APP/Contents/MacOS/AirStats"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
