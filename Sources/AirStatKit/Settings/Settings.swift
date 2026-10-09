@@ -265,10 +265,6 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// Previously `itemSpacing`, a 0–24 slider. 8 is the gap AppKit puts between its
     /// own status items, which is the gap this has to match to look like it belongs.
     public static let itemSpacing: Double = 8
-    /// Previously `hidesIdleItems` and `idleThreshold`. A readout that removes itself
-    /// when it goes quiet takes the whole bar with it every time it comes back, and
-    /// the moment a metric is worth watching is not reliably the moment it is high.
-    public static let hidesIdleItems = false
 
     public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
                 usesCombinedItem: Bool = true,
@@ -381,12 +377,6 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     /// Previously `processRowCount` and `processSortKey`.
     public static let processRowCount = 5
     public static let processSortKey: ProcessSortKey = .cpu
-    /// Previously `showsSparklines`. The header trace is gone; a module's series is
-    /// drawn once, as the history chart under its rows.
-    public static let showsSparklines = false
-    /// Previously `staysOpenOnFocusLoss`. The panel closes when it loses focus, which
-    /// is what a menu bar popover does and what clicking outside one means.
-    public static let staysOpenOnFocusLoss = false
 
     public init(collapsedModules: Set<PanelModule> = PanelSettings.defaultCollapsed,
                 showsHistoryChart: Bool = true) {

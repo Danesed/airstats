@@ -345,10 +345,6 @@ public final class DesktopWidgetController: NSObject, NSWindowDelegate {
         }
     }
 
-    public func setClickThrough(_ enabled: Bool) {
-        settings.update { $0.desktopWidget.isClickThrough = enabled }
-    }
-
     private func installProximityMonitor() {
         guard proximityMonitor == nil else { return }
         // Event-driven, not polled: this fires only when the pointer actually moves,

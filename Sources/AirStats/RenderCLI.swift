@@ -165,15 +165,5 @@ private func themeColor(from text: String) -> ThemeColor? {
         return ThemeColor(red: parts[0], green: parts[1], blue: parts[2])
     }
 
-    let hex = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
-    guard hex.count == 6, let value = UInt32(hex, radix: 16) else { return nil }
-    return ThemeColor(red: Double((value >> 16) & 0xFF) / 255,
-                      green: Double((value >> 8) & 0xFF) / 255,
-                      blue: Double(value & 0xFF) / 255)
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
+    return ThemeColor(hex: trimmed)
 }

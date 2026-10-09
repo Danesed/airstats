@@ -201,3 +201,24 @@ public struct StackedCompositionBar: View {
         return "Total \(format.string(total, using: formatter)). " + parts.joined(separator: ". ")
     }
 }
+
+extension CompositionSegment {
+    /// Memory's breakdown as the panel draws it: four shades of the memory tint for the
+    /// parts in use, and free memory last as the remainder.
+    public static func memory(_ memory: MemorySnapshot) -> [CompositionSegment] {
+        let tint = Design.Palette.metric(.memory)
+        let shades = ChartPalette.composition(tint, count: 4)
+        return [
+            CompositionSegment(id: "app", label: "App", value: Double(memory.appBytes),
+                               tint: shades[0]),
+            CompositionSegment(id: "wired", label: "Wired", value: Double(memory.wiredBytes),
+                               tint: shades[1]),
+            CompositionSegment(id: "compressed", label: "Compressed", shortLabel: "Comp",
+                               value: Double(memory.compressedBytes), tint: shades[2]),
+            CompositionSegment(id: "cached", label: "Cached", value: Double(memory.cachedBytes),
+                               tint: shades[3]),
+            CompositionSegment(id: "free", label: "Free", value: Double(memory.freeBytes),
+                               tint: Design.Palette.track, isRemainder: true),
+        ]
+    }
+}

@@ -103,7 +103,7 @@ extension ThemeColor {
     /// Accepts what people actually paste: a leading hash or not, three digits or six,
     /// any case, surrounding space. Nil for anything else, so a half-typed value is
     /// simply not applied rather than applied as black.
-    init?(hex: String) {
+    public init?(hex: String) {
         var text = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if text.hasPrefix("#") { text.removeFirst() }
         if text.count == 3 { text = text.map { "\($0)\($0)" }.joined() }

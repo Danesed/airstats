@@ -120,18 +120,6 @@ extension SettingsStore {
                     self.update { $0[keyPath: keyPath] = (newValue / step).rounded() * step }
                 })
     }
-
-    /// Membership in a set, expressed as a toggle.
-    func membership<Element: Hashable>(_ keyPath: WritableKeyPath<AirStatKit.Settings, Set<Element>>,
-                                       _ element: Element) -> Binding<Bool> {
-        Binding(get: { self.settings[keyPath: keyPath].contains(element) },
-                set: { isOn in
-                    self.update {
-                        if isOn { $0[keyPath: keyPath].insert(element) }
-                        else { $0[keyPath: keyPath].remove(element) }
-                    }
-                })
-    }
 }
 
 // MARK: - Materials

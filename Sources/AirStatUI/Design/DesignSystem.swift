@@ -23,13 +23,10 @@ public enum Design {
         public static let m: CGFloat = 8
         public static let l: CGFloat = 12
         public static let xl: CGFloat = 16
-        public static let xxl: CGFloat = 24
 
         /// Horizontal inset for panel content. Matches the leading inset macOS uses
         /// for menu item text, so labels line up with the system menus above them.
         public static let panelInset: CGFloat = 14
-        /// Vertical padding inside one module block.
-        public static let moduleVertical: CGFloat = 10
         /// Gap between a label and its value in a readout row.
         public static let rowGap: CGFloat = 12
     }

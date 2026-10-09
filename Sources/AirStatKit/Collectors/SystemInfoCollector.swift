@@ -55,17 +55,17 @@ public final class SystemInfoCollector: MetricSource {
     /// which the caller reports as a transient failure rather than papering over.
     private static func resolveIdentity() -> SystemInfoSnapshot? {
         guard let modelIdentifier = sysctlString("hw.model"),
-              let memoryBytes = sysctlInteger("hw.memsize"),
-              let logicalCores = sysctlInteger("hw.logicalcpu"),
-              let physicalCores = sysctlInteger("hw.physicalcpu"),
+              let memoryBytes = sysctlInt("hw.memsize").map(UInt64.init),
+              let logicalCores = sysctlInt("hw.logicalcpu"),
+              let physicalCores = sysctlInt("hw.physicalcpu"),
               let bootTime = bootTime()
         else { return nil }
 
         // perflevel0 is the fastest cluster and perflevel1 the slowest; both keys are
         // absent on Intel, where the whole package is one performance level. Reporting
         // 0/0 there is honest — the split does not exist — rather than guessed.
-        let performanceCores = sysctlInteger("hw.perflevel0.logicalcpu")
-        let efficiencyCores = sysctlInteger("hw.perflevel1.logicalcpu")
+        let performanceCores = sysctlInt("hw.perflevel0.logicalcpu")
+        let efficiencyCores = sysctlInt("hw.perflevel1.logicalcpu")
         let hasClusters = performanceCores != nil && efficiencyCores != nil
 
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -81,12 +81,12 @@ public final class SystemInfoCollector: MetricSource {
             osBuild: sysctlString("kern.osversion") ?? "",
             uptime: max(0, Date().timeIntervalSince(bootTime)),
             bootTime: bootTime,
-            physicalCores: Int(physicalCores),
-            logicalCores: Int(logicalCores),
-            performanceCores: hasClusters ? Int(performanceCores!) : 0,
-            efficiencyCores: hasClusters ? Int(efficiencyCores!) : 0,
+            physicalCores: physicalCores,
+            logicalCores: logicalCores,
+            performanceCores: hasClusters ? performanceCores! : 0,
+            efficiencyCores: hasClusters ? efficiencyCores! : 0,
             totalMemoryBytes: memoryBytes,
-            isAppleSilicon: (sysctlInteger("hw.optional.arm64") ?? 0) == 1,
+            isAppleSilicon: (sysctlInt("hw.optional.arm64") ?? 0) == 1,
             gpuCoreCount: gpuCoreCount()
         )
     }
@@ -112,27 +112,6 @@ public final class SystemInfoCollector: MetricSource {
         guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
         let value = String(cString: buffer)
         return value.isEmpty ? nil : value
-    }
-
-    /// Width-agnostic: `hw.memsize` is 64-bit while the core counts are 32-bit, and
-    /// reading either with the wrong width silently returns garbage.
-    private static func sysctlInteger(_ name: String) -> UInt64? {
-        var size = 0
-        guard sysctlbyname(name, nil, &size, nil, 0) == 0 else { return nil }
-        switch size {
-        case MemoryLayout<UInt32>.size:
-            var value: UInt32 = 0
-            var length = size
-            guard sysctlbyname(name, &value, &length, nil, 0) == 0 else { return nil }
-            return UInt64(value)
-        case MemoryLayout<UInt64>.size:
-            var value: UInt64 = 0
-            var length = size
-            guard sysctlbyname(name, &value, &length, nil, 0) == 0 else { return nil }
-            return value
-        default:
-            return nil
-        }
     }
 
     private static func bootTime() -> Date? {

@@ -162,8 +162,6 @@ public final class MetricsEngine {
         updateActivity()
     }
 
-    public func refreshNow() { core?.sampleNow() }
-
     /// True when the user asked for a pause, the machine is in Low Power Mode, and
     /// there is something to freeze on.
     ///
@@ -186,7 +184,7 @@ public final class MetricsEngine {
             // Ranked below the surfaces the user opened deliberately and above the
             // occlusion throttle: a pause is the stronger of the two power measures,
             // but freezing a panel the user is looking at would show them stale numbers
-            // with no way to refresh, since a suspended core ignores `sampleNow`.
+            // with no way to refresh, since a suspended core takes no samples.
             newActivity = .suspended
         } else if isMenuBarOccluded && settingsStore.settings.general.throttlesWhenOccluded {
             newActivity = .occluded

@@ -294,25 +294,6 @@ private func listPIDs(_ buffer: inout [pid_t], filter: UInt32, argument: UInt32)
     }
 }
 
-/// File-scoped on purpose: every collector lives in the same module, so a shared
-/// helper here would collide with the identically-named one another collector needs.
-private func sysctlInt(_ name: String) -> Int? {
-    var size = 0
-    guard sysctlbyname(name, nil, &size, nil, 0) == 0 else { return nil }
-    switch size {
-    case MemoryLayout<Int32>.size:
-        var value: Int32 = 0
-        guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
-        return Int(value)
-    case MemoryLayout<Int64>.size:
-        var value: Int64 = 0
-        guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
-        return Int(value)
-    default:
-        return nil
-    }
-}
-
 private func machMessage(_ code: kern_return_t) -> String {
     guard let text = mach_error_string(code) else { return "kern_return \(code)" }
     return "\(String(cString: text)) (\(code))"

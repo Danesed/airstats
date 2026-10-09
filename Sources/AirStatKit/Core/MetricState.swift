@@ -76,36 +76,9 @@ public enum MetricState<Value: Sendable & Equatable>: Sendable, Equatable {
         case .failure(let f): return .failure(f)
         }
     }
-
-    /// Value if present, otherwise the supplied default. Use only for
-    /// non-displayed math (e.g. sorting); never to fabricate a displayed number.
-    public func valueOr(_ fallback: Value) -> Value { value ?? fallback }
 }
 
 extension MetricState: Hashable where Value: Hashable {}
-
-/// A sample plus the monotonic instant it was captured at.
-///
-/// `ContinuousClock` is used deliberately: it keeps advancing across system sleep,
-/// so a snapshot taken before a 3-hour sleep is correctly reported as 3 hours stale
-/// on wake rather than appearing fresh.
-public struct Timestamped<Value: Sendable & Equatable>: Sendable, Equatable {
-    public var value: Value
-    public var capturedAt: ContinuousClock.Instant
-    public var wallClock: Date
-
-    public init(_ value: Value,
-                capturedAt: ContinuousClock.Instant = Monotonic.now,
-                wallClock: Date = Date()) {
-        self.value = value
-        self.capturedAt = capturedAt
-        self.wallClock = wallClock
-    }
-
-    public var age: Duration { Monotonic.now - capturedAt }
-
-    public func isStale(threshold: Duration) -> Bool { age > threshold }
-}
 
 /// Monotonic time source for the whole app.
 ///
@@ -118,12 +91,5 @@ public enum Monotonic {
     public static func seconds(since instant: ContinuousClock.Instant) -> Double {
         let d = now - instant
         return Double(d.components.seconds) + Double(d.components.attoseconds) * 1e-18
-    }
-}
-
-extension Duration {
-    /// Seconds as a `Double`, for arithmetic against sampling intervals.
-    public var seconds: Double {
-        Double(components.seconds) + Double(components.attoseconds) * 1e-18
     }
 }

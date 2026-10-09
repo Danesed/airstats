@@ -207,15 +207,6 @@ public final class SamplingCore: @unchecked Sendable {
         }
     }
 
-    public func setBaseInterval(_ interval: TimeInterval) {
-        queue.async { [self] in
-            let clamped = min(max(interval, 0.5), 60)
-            guard clamped != baseInterval else { return }
-            baseInterval = clamped
-            rescheduleTimerLocked()
-        }
-    }
-
     public func apply(_ configuration: Configuration) {
         queue.async { [self] in
             applyLocked(configuration)
@@ -239,9 +230,8 @@ public final class SamplingCore: @unchecked Sendable {
                 sampleLocked(force: true)
             } else if newActivity > .menuBar {
                 // The panel or widget just opened: this is the one immediate sample
-                // for that surface, so it ignores cadence. `sampleNow` is not called
-                // as well, because two back-to-back passes give the counter
-                // collectors a near-zero interval to divide by.
+                // for that surface, so it ignores cadence. Only one: two back-to-back
+                // passes give the counter collectors a near-zero interval to divide by.
                 sampleLocked(force: true)
             }
         }
@@ -300,14 +290,6 @@ public final class SamplingCore: @unchecked Sendable {
             if wasConstrained, multiplier == 1, isRunning, activity.isSampling {
                 sampleLocked(force: true)
             }
-        }
-    }
-
-    /// Sample once, right now, regardless of cadence. Used when the panel opens.
-    public func sampleNow() {
-        queue.async { [self] in
-            guard isRunning else { return }
-            sampleLocked(force: true)
         }
     }
 

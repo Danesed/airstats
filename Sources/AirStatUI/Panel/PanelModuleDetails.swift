@@ -118,7 +118,7 @@ extension PanelModuleView {
 
     private var memoryDetail: some View {
         section(engine.memory) { memory in
-            let segments = Self.readableSegments(ChartGallery.memorySegments(memory))
+            let segments = Self.readableSegments(CompositionSegment.memory(memory))
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 StackedCompositionBar(segments, format: .memoryBytes,
                                       title: "Memory composition",
