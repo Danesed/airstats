@@ -271,13 +271,14 @@ private struct PanelPreviewHost: View {
     let request: OffscreenRenderer.Request
 
     var body: some View {
-        // Stands SwiftUI's `.regularMaterial` in for the panel window's real
-        // `NSVisualEffectView`, which draws nothing offscreen. The sheen over it is the
-        // same one the window applies, so the glass edge at least renders here.
+        // Stands SwiftUI's `.regularMaterial` in for the panel window's real glass,
+        // which draws nothing offscreen. The sheen over it is the one the window used
+        // before Liquid Glass, so the glass edge at least renders here.
         PanelRootView(engine: PreviewEngine.make(request), settings: PreviewEngine.store(request))
             .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
                                                   style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))
+            .environment(\.rendersOffscreen, true)
     }
 }
 
@@ -286,6 +287,7 @@ private struct DesktopWidgetPreviewHost: View {
 
     var body: some View {
         DesktopWidgetRootView(engine: PreviewEngine.make(request), settings: PreviewEngine.store(request))
+            .environment(\.rendersOffscreen, true)
     }
 }
 
@@ -300,11 +302,12 @@ private struct SettingsPreviewHost: View {
         SettingsRootView(settings: PreviewEngine.store(request),
                          engine: PreviewEngine.make(request))
             // The window's glass, stood in for the same way the panel's is: its real
-            // `NSVisualEffectView` draws nothing offscreen, so without this the whole
-            // settings render is content floating on transparency.
+            // glass draws nothing offscreen, so without this the whole settings render
+            // is content floating on transparency.
             .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
                                                   style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))
+            .environment(\.rendersOffscreen, true)
     }
 }
 

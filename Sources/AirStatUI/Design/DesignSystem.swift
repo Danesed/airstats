@@ -360,28 +360,42 @@ public struct MetricContent<Value: Sendable & Equatable, Content: View>: View {
 extension View {
     /// Background for a surface that floats above content the app does not own.
     ///
-    /// A blurred material plus `GlassSheen` — see that type for why the sheen is what
-    /// separates "translucent" from "glass".
-    ///
-    /// The real thing is macOS 26's `glassEffect`, which this project cannot compile
-    /// against: it needs the macOS 26 SDK from Xcode 26 and this builds on Xcode 16's
-    /// macOS 15 SDK. Not a deployment-target question — `Package.swift` targets macOS
-    /// 14 and an `#available(macOS 26)` check would handle that fine — the symbol
-    /// simply does not exist to link. When the toolchain moves, this one function is
-    /// the only thing that changes:
-    ///
-    ///     if #available(macOS 26.0, *) {
-    ///         glassEffect(.regular, in: shape)
-    ///     } else {
-    ///         background(.regularMaterial, in: shape).overlay { GlassSheen(shape: shape) }
-    ///     }
+    /// Liquid Glass on macOS 26 and later. Before that, and in the offscreen renderer
+    /// where Liquid Glass draws nothing, a blurred material plus `GlassSheen`: see that
+    /// type for why the sheen is what separates "translucent" from "glass".
     ///
     /// Reduce Transparency needs no handling at the call site: the system substitutes
-    /// an opaque fill for the material, and the sheen is faint enough over it to read
+    /// an opaque fill for either surface, and the sheen is faint enough over it to read
     /// as a bevel rather than as a smear.
-    func floatingSurface(in shape: some InsettableShape) -> some View {
-        background(.regularMaterial, in: shape)
-            .overlay { GlassSheen(shape: shape) }
+    func floatingSurface<S: InsettableShape>(in shape: S) -> some View {
+        modifier(FloatingSurface(shape: shape))
+    }
+}
+
+private struct FloatingSurface<S: InsettableShape>: ViewModifier {
+    let shape: S
+    @Environment(\.rendersOffscreen) private var rendersOffscreen
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26.0, *), !rendersOffscreen {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.regularMaterial, in: shape)
+                .overlay { GlassSheen(shape: shape) }
+        }
+    }
+}
+
+private struct RendersOffscreenKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Set by the offscreen renderer, whose snapshots capture no Liquid Glass.
+    var rendersOffscreen: Bool {
+        get { self[RendersOffscreenKey.self] }
+        set { self[RendersOffscreenKey.self] = newValue }
     }
 }
 
@@ -420,9 +434,51 @@ public struct GlassSheen<S: InsettableShape>: View {
 
 // MARK: - AppKit glass
 
+/// The sheet of glass a window's whole content sits on: the panel and the settings
+/// window.
+///
+/// `NSGlassEffectView` on macOS 26 and later, which owns the rounding and the rim
+/// light itself. Earlier releases get `GlassBackdropView`, the material and sheen that
+/// stood in for it. `content` is pinned edge to edge either way.
+@MainActor
+public func glassWindowBackdrop(around content: NSView, cornerRadius: CGFloat) -> NSView {
+    content.translatesAutoresizingMaskIntoConstraints = false
+    if #available(macOS 26.0, *) {
+        let glass = WindowGlassView()
+        glass.style = .regular
+        glass.cornerRadius = cornerRadius
+        glass.contentView = content
+        return glass
+    } else {
+        // `.hudWindow` rather than `.menu`: neither surface is a menu, and the menu
+        // material is nearly opaque. `.active` rather than following the window,
+        // because both are routinely looked at while another app is frontmost and a
+        // backdrop that goes flat the moment it opens defeats the point of having one.
+        let effect = GlassBackdropView(material: .hudWindow, cornerRadius: cornerRadius,
+                                       state: .active)
+        effect.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: effect.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: effect.trailingAnchor),
+            content.topAnchor.constraint(equalTo: effect.topAnchor),
+            content.bottomAnchor.constraint(equalTo: effect.bottomAnchor),
+        ])
+        return effect
+    }
+}
+
+/// `NSGlassEffectView` lays its content view out to fill it but reports a fixed 10 by
+/// 10 fitting size whatever the content needs, pinned or not. The panel takes its
+/// window's size from that figure, so it opened as a 10 point square. This reports the
+/// content's size instead.
+@available(macOS 26.0, *)
+private final class WindowGlassView: NSGlassEffectView {
+    override var fittingSize: NSSize { contentView?.fittingSize ?? super.fittingSize }
+}
+
 /// An `NSVisualEffectView` carrying the same sheen, for the surfaces whose background
-/// is a window's content view rather than a SwiftUI modifier: the panel and the
-/// settings window, which are one sheet of glass each.
+/// is a window's content view rather than a SwiftUI modifier, on releases before
+/// Liquid Glass. See `glassWindowBackdrop`.
 ///
 /// The sheen is a subview rather than a sublayer of the effect view's own layer:
 /// `NSVisualEffectView` owns that layer tree and rebuilds it when the material or the

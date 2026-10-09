@@ -344,19 +344,31 @@ struct RestoreDefaultsButton: View {
 
 /// The window's own glass, for a surface that has to sit on top of it.
 ///
-/// A popover is its own window and comes with AppKit's popover material, which in dark
-/// mode is far darker than the `.hudWindow` glass this settings window is made of. The
-/// result reads as a black hole punched over the app rather than as a sheet lifted off
-/// it. Made of the same material, the two match by construction, in both appearances
-/// and against whatever is behind the window.
-struct GlassBackdrop: NSViewRepresentable {
-    var material: NSVisualEffectView.Material = .hudWindow
+/// Before Liquid Glass, a popover is its own window and comes with AppKit's popover
+/// material, which in dark mode is far darker than the `.hudWindow` glass this settings
+/// window is made of. The result reads as a black hole punched over the app rather than
+/// as a sheet lifted off it. Made of the same material, the two match by construction,
+/// in both appearances and against whatever is behind the window.
+///
+/// On macOS 26 and later the popover is already Liquid Glass, the same as the window
+/// under it, and a second pane laid inside it would be glass on glass. So it draws
+/// nothing there.
+struct GlassBackdrop: View {
+    var body: some View {
+        if #available(macOS 26.0, *) {
+            Color.clear
+        } else {
+            LegacyGlassBackdrop()
+        }
+    }
+}
 
+private struct LegacyGlassBackdrop: NSViewRepresentable {
     func makeNSView(context: Context) -> GlassBackdropView {
         // Active rather than following the window: a popover's parent window is not
         // key while the popover is up, which would grey the glass exactly when it is
         // being looked at.
-        GlassBackdropView(material: material, state: .active)
+        GlassBackdropView(material: .hudWindow, state: .active)
     }
 
     func updateNSView(_ view: GlassBackdropView, context: Context) {}

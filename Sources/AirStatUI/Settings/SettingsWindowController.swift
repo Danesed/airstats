@@ -77,19 +77,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
 
-        let backdrop = GlassBackdropView(material: .hudWindow,
-                                         cornerRadius: Design.Radius.panel,
-                                         state: .active)
-        let hosting = NSHostingView(rootView: root)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.addSubview(hosting)
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: backdrop.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
-        ])
-        window.contentView = backdrop
+        window.contentView = glassWindowBackdrop(around: NSHostingView(rootView: root),
+                                                 cornerRadius: Design.Radius.panel)
 
         window.setContentSize(SettingsRootView.windowSize)
         window.setFrameAutosaveName("AirStatsSettingsWindow")

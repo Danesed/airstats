@@ -537,25 +537,8 @@ final class PanelWindow: NSPanel {
         isMovableByWindowBackground = false
         title = "AirStats Panel"
 
-        // `.hudWindow` rather than `.menu`: the panel is not a menu, and the menu
-        // material is nearly opaque — what is behind the panel should be visible
-        // through it. `.active` rather than following the window, because the panel is
-        // routinely looked at while another app is frontmost and a backdrop that goes
-        // flat the moment it opens defeats the point of having one.
-        let visualEffect = GlassBackdropView(material: .hudWindow,
-                                             cornerRadius: Design.Radius.panel,
-                                             state: .active)
-
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        visualEffect.addSubview(contentView)
-        NSLayoutConstraint.activate([
-            contentView.leadingAnchor.constraint(equalTo: visualEffect.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: visualEffect.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: visualEffect.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: visualEffect.bottomAnchor),
-        ])
-
-        self.contentView = visualEffect
+        self.contentView = glassWindowBackdrop(around: contentView,
+                                               cornerRadius: Design.Radius.panel)
     }
 
     /// Borderless windows are not key by default, which would break text fields
