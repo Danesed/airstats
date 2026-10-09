@@ -10,7 +10,7 @@ let package = Package(
         .library(name: "AirStatUI", targets: ["AirStatUI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
     ],
     targets: [
         // Metric collection. Deliberately Swift 5 language mode: the collectors are
