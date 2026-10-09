@@ -45,11 +45,11 @@ those can be turned off in General settings.
 
 ## Build from source
 
-You need the Swift 6 toolchain that ships with Xcode 16.
+You need Xcode 26 or later: the app draws Liquid Glass, which needs the macOS 26 SDK.
 
 ```sh
 Scripts/build.sh release
-cp -R .build/arm64-apple-macosx/release/AirStats.app /Applications/
+cp -R .build/release/AirStats.app /Applications/
 open /Applications/AirStats.app
 ```
 

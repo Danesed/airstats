@@ -11,7 +11,7 @@ Examples:
     python3 Scripts/benchmark-lightweight.py \
       --executable /tmp/airstats-baseline/.../AirStats
     python3 Scripts/benchmark-lightweight.py \
-      --executable .build/arm64-apple-macosx/release/AirStats --json after.json
+      --executable .build/release/AirStats --json after.json
 """
 
 from __future__ import annotations

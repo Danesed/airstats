@@ -7,7 +7,8 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-15
+    # The panel and settings draw Liquid Glass, which needs the macOS 26 SDK.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
