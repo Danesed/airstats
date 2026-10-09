@@ -252,8 +252,9 @@ public final class StatusItemController {
                                        isStale: engine.isStale)
         for entry in hosted {
             let slice = StatusItemController.slice(model, readout: entry.readout)
-            entry.content.update(with: slice)
-            entry.item.length = entry.content.intrinsicContentSize.width
+            guard entry.content.update(with: slice) else { continue }
+            let width = entry.content.intrinsicContentSize.width
+            if entry.item.length != width { entry.item.length = width }
             entry.item.button?.setAccessibilityValue(slice.accessibilityDescription)
         }
     }

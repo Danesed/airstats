@@ -166,16 +166,21 @@ public final class MenuBarContentView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    public func update(with model: MenuBarRenderModel) {
-        guard model != self.model else { return }
+    /// Returns whether anything changed, so the owner can skip its own follow-up work
+    /// on the many ticks where the readout draws exactly what it drew last time.
+    @discardableResult
+    public func update(with model: MenuBarRenderModel) -> Bool {
+        guard model != self.model else { return false }
         if self.model?.usesMonospacedDigits != model.usesMonospacedDigits {
             fonts = FontSet(monospacedDigits: model.usesMonospacedDigits)
             textCache.removeAll(keepingCapacity: true)
         }
         self.model = model
+        let previousWidth = cachedWidth
         layOut(model)
-        invalidateIntrinsicContentSize()
+        if cachedWidth != previousWidth { invalidateIntrinsicContentSize() }
         needsDisplay = true
+        return true
     }
 
     public override var intrinsicContentSize: NSSize {
