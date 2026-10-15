@@ -50,6 +50,21 @@ public final class ThermalCollector: MetricSource {
     /// that are the SMC saying "this domain is off", which must render as absent.
     private static let plausibleRange: ClosedRange<Double> = 1.0...130.0
 
+    /// A powered CPU or GPU die idles well above the room it sits in, so for those two
+    /// categories the floor is higher. The first two samples after a wake from deep
+    /// idle (measured on macOS 27) read the CPU at 2.7 °C and the GPU at 7.6 °C while
+    /// the SMC was still coming up, and the 24-hour chart kept "min 3°C" for the rest
+    /// of the day. Ambient and battery sensors keep the low floor: a cold room is real.
+    private static let dieFloor = 10.0
+
+    static func isPlausible(_ celsius: Double, category: SensorCategory) -> Bool {
+        guard plausibleRange.contains(celsius) else { return false }
+        switch category {
+        case .cpu, .gpu: return celsius >= dieFloor
+        default: return true
+        }
+    }
+
     /// SMC keys are four-character codes whose prefix encodes what is being measured.
     /// Only prefixes verified on Apple Silicon are matched by prefix, because the
     /// namespace is reused: this machine exposes `TCMz` and `TCHP`, which are *not* the
@@ -176,7 +191,7 @@ public final class ThermalCollector: MetricSource {
             }
             // Out-of-band values are a powered-down domain, not a temperature. Dropping
             // the sensor entirely is the only honest rendering: there is no reading.
-            guard Self.plausibleRange.contains(raw) else { continue }
+            guard Self.isPlausible(raw, category: sensor.category) else { continue }
 
             readings.append(TemperatureSensor(id: sensor.id, name: sensor.name,
                                               category: sensor.category, celsius: raw))
