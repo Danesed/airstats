@@ -65,14 +65,25 @@ struct GeneralPane: View {
             // "is this up to date, and will it stay that way" meant knowing to look in
             // two panes and finding no cross-reference in either.
             Section {
+                // The answer to a check is drawn beside the button rather than in
+                // Sparkle's alert. Only an update opens a window, and only when the
+                // user asks to install it, because that window carries the release
+                // notes and the Install button.
                 HStack(spacing: Design.Space.l) {
-                    // Everything past the press belongs to Sparkle: it reports up to
-                    // date, an error, or an update with its release notes and an
-                    // Install button, in its own window.
-                    Button("Check Now…") { updater?.checkForUpdates() }
-                        .disabled(updater?.canCheck != true)
-                        .accessibilityHint("Asks airstats.app whether a newer version exists")
+                    if let pending = updater?.pending {
+                        Button(pending.isReadyToInstall ? "Restart" : "Install…") {
+                            updater?.installPending()
+                        }
+                        .accessibilityHint(pending.isReadyToInstall
+                                           ? "Relaunches AirStats into the new version"
+                                           : "Opens the updater to install it")
+                    } else {
+                        Button("Check Now") { updater?.checkQuietly() }
+                            .disabled(updater?.canCheck != true)
+                            .accessibilityHint("Asks airstats.app whether a newer version exists")
+                    }
                     Spacer()
+                    updateStatus
                 }
                 // Stored by Sparkle rather than in the settings file, so this reads and
                 // writes the updater itself. Only the offscreen renderer has none.
@@ -83,14 +94,6 @@ struct GeneralPane: View {
                 // is to wait for another release and refuse it there.
                 Toggle("Install updates automatically", isOn: installsAutomatically)
                     .disabled(updater == nil || !(updater?.checksAutomatically ?? false))
-                if let checked = lastCheckedNote {
-                    SettingsFootnote(checked)
-                }
-                // Sparkle stamps the check date on failure too, so without this line a
-                // feed that has been unreachable for a month reads as checked just now.
-                if let failure = updater?.lastCheckFailure {
-                    SettingsFootnote("The last check failed: \(failure)")
-                }
             } header: {
                 Text("Updates")
             }
@@ -120,15 +123,57 @@ struct GeneralPane: View {
                 set: { updater?.setInstallsAutomatically($0) })
     }
 
-    /// Standing answer to "is this thing actually running?", which the button alone
-    /// cannot give: the automatic check is silent when it finds nothing, so a user who
-    /// has never pressed anything would otherwise see no sign of it at all.
-    private var lastCheckedNote: String? {
-        guard let checked = updater?.lastCheck else { return nil }
-        let relative = RelativeDateTimeFormatter()
-        relative.unitsStyle = .full
-        return "Last checked \(relative.localizedString(for: checked, relativeTo: Date()))."
+    /// The state of updates, beside the button that changes it. It also answers "is
+    /// this thing actually running?": the automatic check is silent when it finds
+    /// nothing, so without the checked time a user who never pressed anything would see
+    /// no sign of it at all. A failure is named, because Sparkle stamps the check date
+    /// on failure too and a feed unreachable for a month would otherwise read as fine.
+    @ViewBuilder
+    private var updateStatus: some View {
+        if updater?.isChecking == true {
+            HStack(spacing: Design.Space.s) {
+                ProgressView().controlSize(.small)
+                Text("Checking…")
+            }
+            .foregroundStyle(.secondary)
+        } else if let failure = updater?.lastCheckFailure {
+            Text("Couldn't check")
+                .foregroundStyle(.secondary)
+                .help(failure)
+                .accessibilityValue(failure)
+        } else if updater?.pending != nil || updater?.lastCheck != nil {
+            VStack(alignment: .trailing, spacing: Design.Space.xxs) {
+                if let pending = updater?.pending {
+                    Text(pending.isReadyToInstall ? "AirStats \(pending.version) is ready"
+                                                  : "AirStats \(pending.version) is available")
+                } else {
+                    Text("Up to date")
+                }
+                if let checked = updater?.lastCheck {
+                    Text("Checked \(Self.checkedPhrase(checked))")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityElement(children: .combine)
+        }
     }
+
+    /// A check that has just finished is stamped a moment after the `Date()` it is
+    /// drawn against, and the formatter reads that as "in 0 seconds".
+    private static func checkedPhrase(_ checked: Date) -> String {
+        let now = Date()
+        guard now.timeIntervalSince(checked) >= 60 else { return "just now" }
+        return relative.localizedString(for: checked, relativeTo: now)
+    }
+
+    private static let relative: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter
+    }()
 
     /// Process-level state rather than a stored preference, so the store's value alone
     /// would change nothing until the next launch.

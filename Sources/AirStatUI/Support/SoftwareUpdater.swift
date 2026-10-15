@@ -62,6 +62,9 @@ public final class SoftwareUpdater {
     /// failure too, so without this a feed that has been unreachable for a month reads
     /// as "checked two minutes ago" and nothing else.
     public private(set) var lastCheckFailure: String?
+    /// True from a quiet check's start until Sparkle ends its cycle, so the settings row
+    /// can say it is checking instead of showing nothing.
+    public private(set) var isChecking = false
     public private(set) var checksAutomatically: Bool
     /// Whether Sparkle downloads and installs on its own. Off until the user says
     /// otherwise, either here or in Sparkle's own window, which offers the same choice
@@ -84,6 +87,10 @@ public final class SoftwareUpdater {
     /// Sparkle's "install this now and relaunch", handed over once the automatic
     /// installer has staged an update. Held until the machine is unattended.
     @ObservationIgnored private var installStaged: (() -> Void)?
+    /// When the last quiet check finished. Kept here as well as read from Sparkle, so
+    /// the row's "checked" time reflects a check the user just made whatever Sparkle
+    /// records for an information-only check.
+    @ObservationIgnored private var quietCheckFinished: Date?
 
     public init(defaults: UserDefaults = .standard) {
         let hooks = UpdaterHooks()
@@ -117,8 +124,13 @@ public final class SoftwareUpdater {
         hooks.onChoice = { [weak self] choice in self?.resolve(choice) }
         hooks.onNothingFound = { [weak self] in self?.pending = nil }
         hooks.onCycleFinished = { [weak self] failure in
-            self?.lastCheckFailure = failure
-            self?.sync()
+            guard let self else { return }
+            if isChecking {
+                isChecking = false
+                quietCheckFinished = Date()
+            }
+            lastCheckFailure = failure
+            sync()
         }
         reminders.onOffered = { [weak self] item, stage in self?.note(item, at: stage) }
     }
@@ -132,8 +144,8 @@ public final class SoftwareUpdater {
         observeUnattended()
     }
 
-    /// The user asked. Sparkle answers in its own window, with an update, an error or
-    /// "you are up to date", which is the reason this app links it at all.
+    /// Sparkle's window: the release notes and the Install button for an update the
+    /// user has chosen to look at.
     ///
     /// The activation is ours rather than Sparkle's. Sparkle activates the app too, but
     /// only from inside the same call, and by then this app has nothing to activate
@@ -143,6 +155,17 @@ public final class SoftwareUpdater {
     public func checkForUpdates() {
         NSApp.activate(ignoringOtherApps: true)
         controller.updater.checkForUpdates()
+    }
+
+    /// The settings button. Asks the feed without opening Sparkle's window, so "up to
+    /// date" or a failure is drawn in the row beside the button rather than in an alert
+    /// that has to be dismissed. A release it finds becomes `pending`, the same record
+    /// a scheduled check leaves, and is installed from there.
+    public func checkQuietly() {
+        guard controller.updater.canCheckForUpdates else { return }
+        isChecking = true
+        lastCheckFailure = nil
+        controller.updater.checkForUpdateInformation()
     }
 
     /// What the panel row does. A staged update relaunches into the new version
@@ -218,7 +241,7 @@ public final class SoftwareUpdater {
 
     private func sync() {
         canCheck = controller.updater.canCheckForUpdates
-        lastCheck = controller.updater.lastUpdateCheckDate
+        lastCheck = [controller.updater.lastUpdateCheckDate, quietCheckFinished].compactMap { $0 }.max()
         checksAutomatically = controller.updater.automaticallyChecksForUpdates
         installsAutomatically = controller.updater.automaticallyDownloadsUpdates
     }
