@@ -48,7 +48,15 @@ if ! security find-identity -v -p codesigning | grep -q "$IDENTITY"; then
   exit 1
 fi
 
-if ! xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
+if ! NOTARY_CHECK="$(xcrun notarytool history --keychain-profile "$PROFILE" 2>&1)"; then
+  # A profile that exists can still be refused. Apple answers 403 when a developer
+  # agreement is waiting to be accepted, and that is not fixed by storing credentials,
+  # so anything other than a missing profile is shown as Apple worded it.
+  if ! grep -q "No Keychain password item found" <<<"$NOTARY_CHECK"; then
+    echo "error: notarytool cannot reach Apple with the '$PROFILE' profile:" >&2
+    sed 's/^/  /' <<<"$NOTARY_CHECK" >&2
+    exit 1
+  fi
   # The App Store Connect key is a file on disk, so the command below can name the real
   # one rather than a placeholder to be worked out under pressure. The issuer cannot be
   # recovered from anything local: it is the UUID on App Store Connect > Users and
@@ -137,11 +145,15 @@ rm -f "$ZIP"
 # .DS_Store itself, rather than by scripting Finder, so this needs no Automation grant
 # and no window on screen. Icon positions there line up with the arrow drawn by
 # Scripts/dmg-background.py.
+#
+# On macOS 27 hdiutil warns that the flags dmgbuild passes it are deprecated, once per
+# call. The image is unaffected, so those lines are dropped and anything else dmgbuild
+# writes to stderr still shows.
 uv run --with dmgbuild dmgbuild \
   -s "$ROOT/Scripts/dmg.py" \
   -D app="$APP" \
   -D root="$ROOT" \
-  "AirStats" "$DMG" >/dev/null
+  "AirStats" "$DMG" 2> >(grep -v "^hdiutil: WARNING: .* is deprecated" >&2) >/dev/null
 
 codesign --force --timestamp --sign "$IDENTITY" "$DMG"
 xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
