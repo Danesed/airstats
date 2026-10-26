@@ -507,6 +507,14 @@ extension PanelModuleView {
         section(engine.thermal) { thermal in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 PanelDetailGrid(entries: thermalEntries(thermal))
+                // Fans are read out rather than gauged: a stopped fan is a normal
+                // state on a Mac that is not working hard, and an empty dial next
+                // to a healthy machine reads as a broken sensor. "0 RPM" cannot be
+                // misread. Full-width rows: "1,765 RPM · 22%" does not fit a half
+                // grid cell next to the fan's name without truncating.
+                ForEach(thermal.fans) { fan in
+                    ReadoutRow(fan.name, fanText(fan))
+                }
                 if let reason = thermal.sensorsUnavailableReason {
                     UnavailableNote(.unsupported(reason))
                 }
@@ -520,13 +528,17 @@ extension PanelModuleView {
         if let gpu = thermal.gpuCelsius {
             entries.append(PanelDetailEntry("GPU", formatter.temperature(gpu)))
         }
-        // Fans are read out rather than gauged: a stopped fan is a normal state on a
-        // Mac that is not working hard, and an empty dial next to a healthy machine
-        // reads as a broken sensor. "0 RPM" cannot be misread.
-        for fan in thermal.fans {
-            entries.append(PanelDetailEntry(fan.name, formatter.rpm(fan.currentRPM)))
-        }
         return entries
+    }
+
+    /// "1,820 RPM · 23%" — the RPM it is spinning at and how far up its rated
+    /// range that is, which is the number RPM alone cannot carry.
+    private func fanText(_ fan: FanInfo) -> String {
+        var text = formatter.rpm(fan.currentRPM)
+        if let maxRPM = fan.maxRPM, maxRPM > 0 {
+            text += " · \(formatter.percentValue(100 * fan.currentRPM / maxRPM))"
+        }
+        return text
     }
 
     // MARK: Processes
