@@ -201,14 +201,15 @@ extension PanelSummary {
                      formatter: MetricFormatter) -> PanelSummary {
         switch module {
         case .cpu:
-            guard let cpu = engine.cpu.value else { return PanelSummary() }
+            guard let cpu = engine.cpu.value else { return warmup(for: engine.cpu) }
             return PanelSummary(value: formatter.percent(cpu.total.busy))
         case .memory:
-            guard let memory = engine.memory.value else { return PanelSummary() }
+            guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
             return PanelSummary(value: formatter.memory(memory.usedBytes),
                                 caption: "used")
         case .gpu:
-            guard let gpu = engine.gpu.value, let device = gpu.primary else { return PanelSummary() }
+            guard let gpu = engine.gpu.value else { return warmup(for: engine.gpu) }
+            guard let device = gpu.primary else { return PanelSummary() }
             guard let utilization = device.utilization else {
                 return PanelSummary(value: device.name, emphasis: .state)
             }
@@ -217,18 +218,19 @@ extension PanelSummary {
                                 // the only caption long enough to break the column.
                                 caption: nil)
         case .network:
-            guard let network = engine.network.value else { return PanelSummary() }
+            guard let network = engine.network.value else { return warmup(for: engine.network) }
             // The Wi-Fi row below already names the connection; the caption is only
             // needed when there is no signal row to carry it.
             return PanelSummary(value: formatter.networkRate(network.downloadBytesPerSecond),
                                 caption: network.wifi == nil ? network.connectionType.label : nil,
                                 symbol: "arrow.down")
         case .disk:
-            guard let disk = engine.disk.value, let root = disk.rootVolume else { return PanelSummary() }
+            guard let disk = engine.disk.value else { return warmup(for: engine.disk) }
+            guard let root = disk.rootVolume else { return PanelSummary() }
             return PanelSummary(value: formatter.storage(root.availableBytes),
                                 caption: "free")
         case .battery:
-            guard let power = engine.power.value else { return PanelSummary() }
+            guard let power = engine.power.value else { return warmup(for: engine.power) }
             guard power.hasBattery, let percentage = power.percentage else {
                 return PanelSummary(value: power.isPluggedIn ? "AC" : MetricFormatter.unavailable,
                                     icon: "powerplug",
@@ -237,20 +239,30 @@ extension PanelSummary {
             return PanelSummary(value: formatter.percentValue(percentage),
                                 caption: power.isCharging ? "charging" : nil)
         case .thermal:
-            guard let thermal = engine.thermal.value else { return PanelSummary() }
+            guard let thermal = engine.thermal.value else { return warmup(for: engine.thermal) }
             guard let celsius = thermal.cpuCelsius else {
                 return PanelSummary(value: thermal.pressure.label,
                                     emphasis: .state)
             }
             return PanelSummary(value: formatter.temperature(celsius))
         case .processes:
-            guard let processes = engine.processes.value else { return PanelSummary() }
+            guard let processes = engine.processes.value else { return warmup(for: engine.processes) }
             return PanelSummary(value: formatter.count(processes.totalProcessCount),
                                 caption: "running")
         case .system:
-            guard let system = engine.system.value else { return PanelSummary() }
+            guard let system = engine.system.value else { return warmup(for: engine.system) }
             return PanelSummary(value: formatter.uptime(system.uptime), caption: "uptime")
         }
+    }
+
+    /// The stand-in while a metric has never sampled: "Collecting…" in the
+    /// headline slot itself, so a warming module stays one line instead of
+    /// gaining a note underneath that vanishes the moment the number lands.
+    /// Harder failures keep their explanation in the detail line.
+    private static func warmup<V>(for state: MetricState<V>) -> PanelSummary {
+        state.failure == .pending
+            ? PanelSummary(value: MetricFailure.pending.shortLabel, emphasis: .state)
+            : PanelSummary()
     }
 
     /// The width the qualifier column needs to hold the widest caption in `summaries`.

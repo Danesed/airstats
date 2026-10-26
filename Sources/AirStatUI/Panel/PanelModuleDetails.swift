@@ -60,7 +60,10 @@ extension PanelModuleView {
             // removed. On the container in `PanelModuleView` it applied to nothing.
             MetricContent(state) { content($0) }
                 .transition(.disclosure)
-        } else if let failure = state.failure {
+        } else if let failure = state.failure, failure != .pending {
+            // Pending is the one failure that does not get a note of its own: the
+            // header is already saying "Collecting…" where the number will land,
+            // and a second line underneath it is the reflow this costs a module.
             UnavailableNote(failure)
         }
     }
