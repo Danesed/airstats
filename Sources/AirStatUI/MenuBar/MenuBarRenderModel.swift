@@ -9,7 +9,7 @@ import AirStatKit
 /// — `"↓ 2.4 MB/s  ↑ 340 KB/s"` — is gone: it was why fixed width did not hold, since
 /// its width tracked the live value and no reserved string could bound it.
 public struct MenuBarLine: Equatable, Sendable {
-    /// Single-character direction marker ("↓", "↑", "R", "W"). Only set on paired
+    /// Single-character direction marker ("↙", "↗", "R", "W"). Only set on paired
     /// readouts, where the two numbers would otherwise be indistinguishable.
     public var glyph: String?
     /// The value, already formatted and unit-suffixed.
@@ -284,10 +284,10 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             // normalising each to its own peak would make a trickle of upload look
             // identical to a saturated link.
             let pair = jointlyNormalized(history, .networkDownload, .networkUpload)
-            secondary = MenuBarLine(glyph: "↑", valueText: uploadText,
+            secondary = MenuBarLine(glyph: "↗", valueText: uploadText,
                                     widestText: rateWidest, series: pair.1)
             return finish(config: config, caption: nil,
-                          primary: MenuBarLine(glyph: "↓", valueText: valueText,
+                          primary: MenuBarLine(glyph: "↙", valueText: valueText,
                                                widestText: rateWidest, series: pair.0),
                           secondary: secondary,
                           unavailable: unavailable, accessibility: accessibilityValue,
@@ -478,8 +478,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .memoryPressure: return "PRESS"
         case .gpuUsage: return "GPU"
         case .networkThroughput: return nil
-        case .networkUpload: return "NET ↑"
-        case .networkDownload: return "NET ↓"
+        case .networkUpload: return "NET ↗"
+        case .networkDownload: return "NET ↙"
         case .diskActivity: return nil
         case .diskFree: return "FREE"
         case .battery: return "BATT"

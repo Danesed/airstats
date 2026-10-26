@@ -80,6 +80,17 @@ enum RenderCLI {
                 }
                 var seen: Set<PanelModule> = []
                 settings.desktopWidget.modules = parsed.filter { seen.insert($0).inserted }
+            // The default items draw no paired readout, so a change to the up/down
+            // cell cannot be reviewed without a way to put it on the bar.
+            case "--menubar":
+                index += 1
+                let names = (arguments[safe: index] ?? "").split(separator: ",")
+                let parsed = names.compactMap { MenuBarMetric(rawValue: String($0)) }
+                guard parsed.count == names.count, !parsed.isEmpty else {
+                    FileHandle.standardError.write(Data("--menubar wants a comma-separated list of metric names\n".utf8))
+                    exit(2)
+                }
+                settings.menuBar.items = parsed.map { MenuBarItemConfig(metric: $0) }
             // Every panel module starts collapsed, so a change to a module's detail
             // cannot be reviewed without a way to open it.
             case "--open":
