@@ -228,7 +228,15 @@ extension PanelModuleView {
     private var networkDetail: some View {
         section(engine.network) { network in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
-                PanelDetailGrid(entries: networkEntries(network))
+                // The header's paired readout already says both rates, so the
+                // detail starts at the addresses. A full row rather than the grid:
+                // alone, it would sit in the left column and the address would
+                // end mid-panel instead of on the right edge like the public one.
+                if let ip = network.localIPv4 {
+                    ReadoutRow("Local IP", ip)
+                } else if let name = network.primaryInterfaceName {
+                    ReadoutRow("Interface", name)
+                }
                 if let publicIP = publicIPValue(network.publicIP) {
                     // Full width rather than a grid cell, the way the battery's adapter
                     // row is: a grid cell is half of 340pt and truncated "203.0.113…"
@@ -245,18 +253,6 @@ extension PanelModuleView {
                 history()
             }
         }
-    }
-
-    /// The header's paired readout already says both rates, so the grid starts at
-    /// the addresses — the part of the answer a headline cannot carry.
-    private func networkEntries(_ network: NetworkSnapshot) -> [PanelDetailEntry] {
-        var entries: [PanelDetailEntry] = []
-        if let ip = network.localIPv4 {
-            entries.append(PanelDetailEntry("Local IP", ip))
-        } else if let name = network.primaryInterfaceName {
-            entries.append(PanelDetailEntry("Interface", name))
-        }
-        return entries
     }
 
     /// What the public IP row says, or nil when there should be no row at all.
