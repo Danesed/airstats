@@ -9,8 +9,9 @@ import AirStatKit
 /// — `"↓ 2.4 MB/s  ↑ 340 KB/s"` — is gone: it was why fixed width did not hold, since
 /// its width tracked the live value and no reserved string could bound it.
 public struct MenuBarLine: Equatable, Sendable {
-    /// Single-character direction marker ("↙", "↗", "R", "W"). Only set on paired
-    /// readouts, where the two numbers would otherwise be indistinguishable.
+    /// Single-character direction marker ("↓"/"↑" on the one-line styles, "↙"/"↗"
+    /// when the pair is stacked, "R"/"W" for disk). Only set on paired readouts,
+    /// where the two numbers would otherwise be indistinguishable.
     public var glyph: String?
     /// The value, already formatted and unit-suffixed.
     public var valueText: String
@@ -284,10 +285,14 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             // normalising each to its own peak would make a trickle of upload look
             // identical to a saturated link.
             let pair = jointlyNormalized(history, .networkDownload, .networkUpload)
-            secondary = MenuBarLine(glyph: "↗", valueText: uploadText,
+            // The stacked style angles its arrows to the diagonal; the one-line
+            // styles keep the vertical pair they have always drawn.
+            let stacked = config.style == .stackedPair
+            secondary = MenuBarLine(glyph: stacked ? "↗" : "↑", valueText: uploadText,
                                     widestText: rateWidest, series: pair.1)
             return finish(config: config, caption: nil,
-                          primary: MenuBarLine(glyph: "↙", valueText: valueText,
+                          primary: MenuBarLine(glyph: stacked ? "↙" : "↓",
+                                               valueText: valueText,
                                                widestText: rateWidest, series: pair.0),
                           secondary: secondary,
                           unavailable: unavailable, accessibility: accessibilityValue,
@@ -335,6 +340,15 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 unavailable = false
                 accessibilityValue = "Disk free \(valueText)"
             }
+
+        case .diskUsage:
+            if let root = snapshot.disk.value?.rootVolume {
+                valueText = formatter.percent(root.usedFraction)
+                unavailable = false
+                level = root.usedFraction
+                accessibilityValue = "Disk usage \(valueText)"
+            }
+            seriesKey = .diskUsed
 
         case .battery:
             if let power = snapshot.power.value, let pct = power.percentage {
@@ -478,10 +492,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .memoryPressure: return "PRESS"
         case .gpuUsage: return "GPU"
         case .networkThroughput: return nil
-        case .networkUpload: return "NET ↗"
-        case .networkDownload: return "NET ↙"
+        case .networkUpload: return "NET ↑"
+        case .networkDownload: return "NET ↓"
         case .diskActivity: return nil
         case .diskFree: return "FREE"
+        case .diskUsage: return "DSK"
         case .battery: return "BATT"
         case .batteryTime: return "LEFT"
         case .systemPower: return "PWR"
@@ -580,7 +595,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .memoryUsage, .memoryPressure: return "memorychip"
         case .gpuUsage: return "cube.transparent"
         case .networkThroughput, .networkUpload, .networkDownload: return "network"
-        case .diskActivity, .diskFree: return "internaldrive"
+        case .diskActivity, .diskFree, .diskUsage: return "internaldrive"
         case .battery, .batteryTime: return "battery.100"
         case .systemPower: return "bolt"
         case .fanSpeed: return "fan"
