@@ -45,7 +45,16 @@ struct NetworkUsageTests {
         #expect(ledger.today.combined() == 300)
         ledger.observe(snapshot(up: 200, down: 400), at: day2)
         #expect(ledger.today.combined() == 300, "today restarted at midnight")
+        #expect(ledger.total.combined() == 600, "the all-time total did not")
         #expect(ledger.networks["Sunnyvale"]?.combined() == 600, "the network did not")
+    }
+
+    @Test("a file written before the total column decodes with it at zero")
+    func oldFileDecodes() throws {
+        let old = Data(#"{"dayKey":"2026-10-25","today":{"upload":1,"download":2},"networks":{}}"#.utf8)
+        let ledger = try JSONDecoder().decode(NetworkUsageLedger.self, from: old)
+        #expect(ledger.today.combined() == 3)
+        #expect(ledger.total.combined() == 0)
     }
 
     @Test("no network name, no per-network bucket")

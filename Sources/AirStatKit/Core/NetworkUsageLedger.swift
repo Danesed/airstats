@@ -34,6 +34,8 @@ public struct NetworkUsageLedger: Codable, Sendable, Equatable {
     /// new day and the totals start over rather than a "last 24 h" that drifts.
     public var dayKey: String = ""
     public var today = Totals()
+    /// Everything attributed since the ledger began, day keys or not.
+    public var total = Totals()
     /// Cumulative bytes per network name (the Wi-Fi SSID, or the interface name
     /// where there is no SSID). All-time, because a cap reads over months.
     public var networks: [String: Totals] = [:]
@@ -45,9 +47,19 @@ public struct NetworkUsageLedger: Codable, Sendable, Equatable {
     public private(set) var lastUpload: UInt64?
     public private(set) var lastDownload: UInt64?
 
-    private enum CodingKeys: String, CodingKey { case dayKey, today, networks }
+    private enum CodingKeys: String, CodingKey { case dayKey, today, total, networks }
 
     public init() {}
+
+    /// `total` arrived after the first files did, so its absence means zero rather
+    /// than a decode failure that would drop the totals that are there.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        dayKey = try c.decodeIfPresent(String.self, forKey: .dayKey) ?? ""
+        today = try c.decodeIfPresent(Totals.self, forKey: .today) ?? Totals()
+        total = try c.decodeIfPresent(Totals.self, forKey: .total) ?? Totals()
+        networks = try c.decodeIfPresent([String: Totals].self, forKey: .networks) ?? [:]
+    }
 
     /// Names the current network the way the totals file does: SSID when there is
     /// one, else the interface ("en0" is less readable than "Ethernet").
@@ -79,6 +91,7 @@ public struct NetworkUsageLedger: Codable, Sendable, Equatable {
             today = Totals()
         }
         today.add(upload: up, download: down)
+        total.add(upload: up, download: down)
         if let name = Self.networkName(of: snapshot) {
             networks[name, default: Totals()].add(upload: up, download: down)
         }
