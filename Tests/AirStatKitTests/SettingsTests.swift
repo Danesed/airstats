@@ -210,6 +210,27 @@ struct RequiredSourceTests {
         let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
         #expect(sources.contains(.power))
     }
+
+    @Test("watching the public IP keeps the network source alive")
+    func publicIPWatchRequiresNetwork() {
+        var settings = Settings()
+        settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
+        settings.notifications.isEnabled = true
+        settings.notifications.notifiesOnPublicIPChange = true
+        let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
+        #expect(sources.contains(.network))
+    }
+
+    @Test("the public IP watch decodes off by default and round trips on")
+    func publicIPWatchDecoding() throws {
+        let defaults = try JSONDecoder().decode(NotificationSettings.self, from: Data("{}".utf8))
+        #expect(defaults.notifiesOnPublicIPChange == false)
+        var on = NotificationSettings()
+        on.notifiesOnPublicIPChange = true
+        let decoded = try JSONDecoder().decode(NotificationSettings.self,
+                                               from: JSONEncoder().encode(on))
+        #expect(decoded.notifiesOnPublicIPChange == true)
+    }
 }
 
 @Suite("History capacity follows interval and retention")

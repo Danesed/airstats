@@ -32,6 +32,7 @@ struct NotificationsPane: View {
                 ForEach(rules) { rule in
                     ruleRows(rule)
                 }
+                publicIPRow
             } header: {
                 Text("Rules")
             }
@@ -80,6 +81,21 @@ struct NotificationsPane: View {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")
         else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// An edge, not a level, so it is a lone switch rather than a threshold rule.
+    /// The footnote names its one dependency: the lookup is still opt-in over in
+    /// General, and without it there is no address to watch.
+    @ViewBuilder
+    private var publicIPRow: some View {
+        Toggle("Public IP changes",
+               isOn: settings.binding(\.notifications.notifiesOnPublicIPChange))
+        if isEnabled, settings.settings.notifications.notifiesOnPublicIPChange,
+           !settings.settings.general.fetchesPublicIP {
+            SettingsFootnote("Needs the public IP lookup, which is off. "
+                             + "Turn on \"Look up my public IP address\" in General "
+                             + "for this to alert.")
+        }
     }
 
     /// Timing controls appear only for a rule that is on, so seven rules do not

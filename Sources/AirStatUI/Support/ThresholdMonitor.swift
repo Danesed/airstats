@@ -15,6 +15,10 @@ public final class ThresholdMonitor {
 
     private var observationTask: Task<Void, Never>?
     private var evaluator = ThresholdEvaluator()
+    /// The last public IP actually reported, or nil until the first lookup lands.
+    /// Seeded silently rather than alerted on, because an address read for the first
+    /// time cannot be told apart from one that changed while nobody was watching.
+    private var lastSeenPublicIP: String?
 
     /// True while the observation loop and any pending authorisation request are
     /// installed.
@@ -80,6 +84,7 @@ public final class ThresholdMonitor {
         let notifications = settings.settings.notifications
         guard notifications.isEnabled else {
             evaluator.reset()
+            lastSeenPublicIP = nil
             return
         }
         // Nothing is measured until there is somewhere to send the answer. Denial is
@@ -99,6 +104,21 @@ public final class ThresholdMonitor {
                                       readings: ThresholdEvaluator.readings(from: engine.snapshot),
                                       now: Date())
         for alert in alerts { deliver(alert) }
+
+        // The public IP watch is an edge, not a level, so it sits beside the rule
+        // evaluator rather than inside it. A failed lookup is simply not a new
+        // address: the baseline stays, so a VPN dropping and coming back to the
+        // same exit alerts nothing.
+        if notifications.notifiesOnPublicIPChange,
+           let current = engine.snapshot.network.value?.publicIP.value {
+            if let last = lastSeenPublicIP, last != current {
+                authority.post(identifier: "network.publicIP",
+                               title: "Public IP changed",
+                               body: "Now \(current), previously \(last).")
+                WindowLog.log("notification posted metric=publicIP value=\(current) previous=\(last)")
+            }
+            lastSeenPublicIP = current
+        }
     }
 
     // MARK: Delivery
