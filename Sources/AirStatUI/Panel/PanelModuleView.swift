@@ -228,13 +228,16 @@ extension PanelSummary {
                                 caption: "used")
         case .gpu:
             guard let gpu = engine.gpu.value, let device = gpu.primary else { return PanelSummary() }
+            // The bare figure, not "Memory 5.4 GB": a caption labels what is on
+            // its row, and a caption that long widens the shared caption column
+            // enough to squeeze the module labels into ellipses.
+            let vram = device.vramUsedBytes.map { formatter.memory($0) }
             guard let utilization = device.utilization else {
-                return PanelSummary(value: device.name, emphasis: .state)
+                return PanelSummary(value: device.name, caption: vram, emphasis: .state)
             }
-            return PanelSummary(value: formatter.percent(utilization),
-                                // Device identity belongs in the expanded detail: it is
-                                // the only caption long enough to break the column.
-                                caption: nil)
+            // Device identity belongs in the expanded detail: it is the only
+            // caption long enough to break the column.
+            return PanelSummary(value: formatter.percent(utilization), caption: vram)
         case .network:
             guard let network = engine.network.value else { return PanelSummary() }
             // The Wi-Fi row below already names the connection; the caption is only
