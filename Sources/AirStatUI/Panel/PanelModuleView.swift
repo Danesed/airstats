@@ -239,7 +239,10 @@ extension PanelSummary {
         switch module {
         case .cpu:
             guard let cpu = engine.cpu.value else { return warmup(for: engine.cpu) }
-            return PanelSummary(value: formatter.percent(cpu.total.busy))
+            // The percentage alone cannot say whether work is queueing: 34% with a
+            // load of 12 is a very different machine from 34% with a load of 1.
+            return PanelSummary(value: formatter.percent(cpu.total.busy),
+                                caption: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
         case .memory:
             guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
             return PanelSummary(value: formatter.percent(memory.pressureFraction),
@@ -266,8 +269,10 @@ extension PanelSummary {
                                 reservedValueText: device.name)
         case .network:
             guard let network = engine.network.value else { return warmup(for: engine.network) }
-            // The Wi-Fi row below already names the connection; the caption is only
-            // needed when there is no signal row to carry it.
+            // The paired headline is already the widest in the panel; even a short
+            // SSID here widens the shared caption column enough to squeeze this
+            // row's own label into an ellipsis. The connection kind only reports
+            // when there is no Wi-Fi row below to carry the network's name.
             return PanelSummary(value: formatter.networkRate(network.downloadBytesPerSecond),
                                 caption: network.wifi == nil ? network.connectionType.label : nil,
                                 symbol: "arrow.down.left",
@@ -289,15 +294,25 @@ extension PanelSummary {
                                     icon: "powerplug",
                                     emphasis: .state)
             }
+            // The caption is the pack's instantaneous power: on battery it is the
+            // system draw, on AC it is the charge rate — which also carries the
+            // "is it charging" answer the old "charging" caption held, in a number.
             return PanelSummary(value: formatter.percentValue(percentage),
-                                caption: power.isCharging ? "charging" : nil)
+                                caption: power.batteryWatts.map { formatter.watts(abs($0)) },
+                                icon: power.isCharging || power.isPluggedIn ? "powerplug" : nil)
         case .thermal:
             guard let thermal = engine.thermal.value else { return warmup(for: engine.thermal) }
+            // The caption is the fastest fan: a temperature is only half the story,
+            // and "52°C" reads very differently depending on whether the fans have
+            // answered. "fan 1820" rather than "1,820 RPM" — the unit suffix would
+            // widen the shared caption column enough to squeeze module labels.
+            let fan = thermal.fans.max { $0.currentRPM < $1.currentRPM }
+                .map { "fan \(Int($0.currentRPM.rounded()))" }
             guard let celsius = thermal.cpuCelsius else {
-                return PanelSummary(value: thermal.pressure.label,
+                return PanelSummary(value: thermal.pressure.label, caption: fan,
                                     emphasis: .state)
             }
-            return PanelSummary(value: formatter.temperature(celsius))
+            return PanelSummary(value: formatter.temperature(celsius), caption: fan)
         case .processes:
             guard let processes = engine.processes.value else { return warmup(for: engine.processes) }
             return PanelSummary(value: formatter.count(processes.totalProcessCount),
@@ -321,8 +336,8 @@ extension PanelSummary {
     /// The width the qualifier column needs to hold the widest caption in `summaries`.
     ///
     /// Measured from what is on screen rather than reserved for the longest caption the
-    /// panel can ever show: sized for "charging", the column stood mostly empty on any
-    /// Mac that was not charging and the whole right edge read as a gap. Every row still
+    /// panel can ever show: sized for a state that is not always present, the column
+    /// stood mostly empty and the whole right edge read as a gap. Every row still
     /// takes the same width, so the numbers keep their shared right edge; that edge
     /// just sits where the captions actually end.
     static func captionColumnWidth(for summaries: [PanelSummary]) -> CGFloat {
