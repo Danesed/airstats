@@ -23,12 +23,13 @@ struct PanelSummary {
     var leadValue: String?
     var leadSymbol: String?
     var emphasis: Emphasis = .measurement
-    /// The slot the headline is promised, reserved ahead of the content that
-    /// fills it. Only a module whose headline swaps a state for a measurement
-    /// mid-session asks for one: without it the "Apple M4 Pro" → "84%" handover
-    /// moves the whole row — the readings draw at different sizes, so the row
-    /// gets taller as well as the number getting wider.
-    var reservedSize: CGSize?
+    /// Text the headline slot is sized for before it is on screen, drawn hidden at
+    /// the size the real reading will use. Only a module whose headline swaps a
+    /// state for a measurement mid-session asks for one: without them the
+    /// "Apple M4 Pro" → "84%" handover moves the whole row, and measured reserves
+    /// drift a point or two from what the layout actually grants a `Text`.
+    var reservedHeadlineText: String?
+    var reservedValueText: String?
 }
 
 /// One module of the panel: a header that carries the headline value, and detail
@@ -155,18 +156,23 @@ struct PanelModuleView: View {
     private var headlineValue: some View {
         if let value = summary.value {
             HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
-                HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
-                    if let lead = summary.leadValue {
-                        headlineReading(symbol: summary.leadSymbol, value: lead)
+                ZStack(alignment: .trailing) {
+                    // Hidden sizers claim the exact slot the readings will occupy —
+                    // same `Text`, same fonts, so the reservation cannot drift from
+                    // the layout the way a hand-measured width can.
+                    if let text = summary.reservedHeadlineText {
+                        Text(text).font(Design.Text.headline).hidden()
                     }
-                    headlineReading(symbol: summary.symbol, value: value)
+                    if let text = summary.reservedValueText {
+                        Text(text).font(Design.Text.value).hidden()
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
+                        if let lead = summary.leadValue {
+                            headlineReading(symbol: summary.leadSymbol, value: lead)
+                        }
+                        headlineReading(symbol: summary.symbol, value: value)
+                    }
                 }
-                // A reserved slot holds the right edge and the row height where
-                // the measurement lands; the state that stands in until then
-                // stays out of the spacer and off the rows below.
-                .frame(minWidth: summary.reservedSize?.width ?? 0,
-                       minHeight: summary.reservedSize?.height ?? 0,
-                       alignment: .trailing)
                 // The qualifier sits in a shared column so it cannot push the number.
                 //
                 // Inline, a caption shifted its value left by its own width, so across the
@@ -244,18 +250,19 @@ extension PanelSummary {
             // its row, and a caption that long widens the shared caption column
             // enough to squeeze the module labels into ellipses.
             let vram = device.vramUsedBytes.map { formatter.memory($0) }
-            // The state and the measurement draw at different sizes, so the slot is
-            // reserved at the bigger of the two — the handover moves only the text.
-            let reserved = Self.headlineReserve(measurement: formatter.percent(1.0),
-                                                state: device.name)
+            // The handover swaps a state-size name for a headline-size number, so
+            // the slot is sized for both from the start and only the text moves.
             guard let utilization = device.utilization else {
                 return PanelSummary(value: device.name, caption: vram,
-                                    emphasis: .state, reservedSize: reserved)
+                                    emphasis: .state,
+                                    reservedHeadlineText: formatter.percent(1.0),
+                                    reservedValueText: device.name)
             }
             // Device identity belongs in the expanded detail: it is the only
             // caption long enough to break the column.
             return PanelSummary(value: formatter.percent(utilization), caption: vram,
-                                reservedSize: reserved)
+                                reservedHeadlineText: formatter.percent(1.0),
+                                reservedValueText: device.name)
         case .network:
             guard let network = engine.network.value else { return PanelSummary() }
             // The Wi-Fi row below already names the connection; the caption is only
@@ -297,21 +304,6 @@ extension PanelSummary {
             guard let system = engine.system.value else { return PanelSummary() }
             return PanelSummary(value: formatter.uptime(system.uptime), caption: "uptime")
         }
-    }
-
-    /// The slot both readings can occupy without the row moving when one hands
-    /// over to the other: the wider of the measurement at headline size and the
-    /// state at value size, and as tall as the measurement's line — which is the
-    /// height the row will settle at.
-    private static func headlineReserve(measurement: String, state: String) -> CGSize {
-        let headlineFont = NSFont.systemFont(ofSize: Design.Text.headlineSize, weight: .medium)
-        let stateFont = NSFont.systemFont(ofSize: Design.Text.valueSize, weight: .medium)
-        let widest = [(measurement, headlineFont), (state, stateFont)].map { string, font in
-            (string as NSString).size(withAttributes: [.font: font]).width
-        }.max() ?? 0
-        let lineHeight = headlineFont.ascender - headlineFont.descender
-                         + headlineFont.leading
-        return CGSize(width: ceil(widest), height: ceil(lineHeight))
     }
 
     /// The width the qualifier column needs to hold the widest caption in `summaries`.

@@ -42,11 +42,9 @@ public enum Design {
         public static let label = Font.system(size: 11, weight: .regular)
         /// Row values. Monospaced digits so a column of numbers does not shimmer as
         /// digits change width — the single most visible cheapness tell in a stats app.
-        public static let valueSize: CGFloat = 11
-        public static let value = Font.system(size: valueSize, weight: .medium).monospacedDigit()
+        public static let value = Font.system(size: 11, weight: .medium).monospacedDigit()
         /// The one large number at the top of a module.
-        public static let headlineSize: CGFloat = 20
-        public static let headline = Font.system(size: headlineSize, weight: .medium).monospacedDigit()
+        public static let headline = Font.system(size: 20, weight: .medium).monospacedDigit()
         /// The desktop widget's headline. The panel's 20pt does not fit a 220pt window that
         /// stacks nine of these, but a module whose reading is set at the same size as
         /// its own detail rows has no headline at all: at 11pt a fan speed shouted as
