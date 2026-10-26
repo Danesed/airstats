@@ -307,6 +307,10 @@ extension PanelModuleView {
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Read", formatter.diskRate(disk.readBytesPerSecond)),
                     PanelDetailEntry("Write", formatter.diskRate(disk.writeBytesPerSecond)),
+                    // Counters since boot: how much the storage has ever moved, the
+                    // closest thing to a wear reading this OS will hand out.
+                    PanelDetailEntry("Lifetime read", formatter.storage(disk.totalReadBytes)),
+                    PanelDetailEntry("Lifetime written", formatter.storage(disk.totalWriteBytes)),
                 ])
                 history()
             }
