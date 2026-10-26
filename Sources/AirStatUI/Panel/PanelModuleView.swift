@@ -18,6 +18,13 @@ struct PanelSummary {
     var icon: String?
     var symbol: String?
     var emphasis: Emphasis = .measurement
+    /// Text the headline slot is sized for before it is on screen, drawn hidden at
+    /// the size the real reading will use. Only a module whose headline swaps a
+    /// state for a measurement mid-session asks for one: without them the
+    /// "Apple M4 Pro" → "84%" handover moves the whole row, and measured reserves
+    /// drift a point or two from what the layout actually grants a `Text`.
+    var reservedHeadlineText: String?
+    var reservedValueText: String?
 }
 
 /// One module of the panel: a header that carries the headline value, and detail
@@ -144,16 +151,29 @@ struct PanelModuleView: View {
     private var headlineValue: some View {
         if let value = summary.value {
             HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
-                if let symbol = summary.symbol {
-                    Image(systemName: symbol)
-                        .font(Design.Text.caption.weight(.semibold))
-                        .foregroundStyle(Design.Palette.secondaryText)
+                ZStack(alignment: .trailing) {
+                    // Hidden sizers claim the exact slot the readings will occupy —
+                    // same `Text`, same fonts, so the reservation cannot drift from
+                    // the layout the way a hand-measured width can.
+                    if let text = summary.reservedHeadlineText {
+                        Text(text).font(Design.Text.headline).hidden()
+                    }
+                    if let text = summary.reservedValueText {
+                        Text(text).font(Design.Text.value).hidden()
+                    }
+                    HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
+                        if let symbol = summary.symbol {
+                            Image(systemName: symbol)
+                                .font(Design.Text.caption.weight(.semibold))
+                                .foregroundStyle(Design.Palette.secondaryText)
+                        }
+                        Text(value)
+                            .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
+                            .foregroundStyle(Design.Palette.primaryText)
+                            .lineLimit(1)
+                            .contentTransition(.numericText())
+                    }
                 }
-                Text(value)
-                    .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
-                    .foregroundStyle(Design.Palette.primaryText)
-                    .lineLimit(1)
-                    .contentTransition(.numericText())
                 // The qualifier sits in a shared column so it cannot push the number.
                 //
                 // Inline, a caption shifted its value left by its own width, so across the
@@ -209,13 +229,19 @@ extension PanelSummary {
                                 caption: "used")
         case .gpu:
             guard let gpu = engine.gpu.value, let device = gpu.primary else { return PanelSummary() }
+            // The handover swaps a state-size name for a headline-size number, so
+            // the slot is sized for both from the start and only the text moves.
             guard let utilization = device.utilization else {
-                return PanelSummary(value: device.name, emphasis: .state)
+                return PanelSummary(value: device.name, emphasis: .state,
+                                    reservedHeadlineText: formatter.percent(1.0),
+                                    reservedValueText: device.name)
             }
             return PanelSummary(value: formatter.percent(utilization),
                                 // Device identity belongs in the expanded detail: it is
                                 // the only caption long enough to break the column.
-                                caption: nil)
+                                caption: nil,
+                                reservedHeadlineText: formatter.percent(1.0),
+                                reservedValueText: device.name)
         case .network:
             guard let network = engine.network.value else { return PanelSummary() }
             // The Wi-Fi row below already names the connection; the caption is only
