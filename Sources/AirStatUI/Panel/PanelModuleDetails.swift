@@ -264,6 +264,7 @@ extension PanelModuleView {
                    totals.combined() > 0 {
                     ReadoutRow("On \(name)", usageText(totals))
                 }
+                LinkQualityRow()
                 if let wifi = network.wifi, let quality = wifi.signalQuality {
                     // The network's name labels its own signal bar; a row that said
                     // "Signal" and a row that said "Network" would be two lines
@@ -603,4 +604,38 @@ extension PanelModuleView {
         }
     }
 
+}
+
+/// The "is the link healthy" row: taps run the system's twenty-second
+/// `networkQuality` test and report its verdict. Only reachable with the module
+/// expanded, which is the gate the feature asked for — a closed panel cannot
+/// start a saturating test, and collapsing it stops one mid-run.
+private struct LinkQualityRow: View {
+    @StateObject private var probe = ResponsivenessProbe()
+    @Environment(\.metricFormatter) private var formatter
+
+    var body: some View {
+        Group {
+            switch probe.state {
+            case .idle:
+                Button { probe.run() } label: {
+                    ReadoutRow("Link quality", "Measure →")
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Runs a twenty-second measurement")
+            case .running:
+                ReadoutRow("Link quality", "Measuring…")
+            case .done(let responsiveness, let download, let upload):
+                ReadoutRow("Link quality", responsiveness)
+                if let download, let upload {
+                    ReadoutRow("Capacity",
+                               "↓ \(formatter.fixed(download, decimals: 0)) Mbps"
+                               + " · ↑ \(formatter.fixed(upload, decimals: 0)) Mbps")
+                }
+            case .failed:
+                ReadoutRow("Link quality", MetricFormatter.unavailable)
+            }
+        }
+        .onDisappear { probe.cancel() }
+    }
 }
