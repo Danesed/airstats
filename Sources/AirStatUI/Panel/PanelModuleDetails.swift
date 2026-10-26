@@ -259,11 +259,6 @@ extension PanelModuleView {
                 if engine.networkUsage.today.combined() > 0 {
                     ReadoutRow("Today", usageText(engine.networkUsage.today))
                 }
-                if let name = NetworkUsageLedger.networkName(of: network),
-                   let totals = engine.networkUsage.networks[name],
-                   totals.combined() > 0 {
-                    ReadoutRow("On \(name)", usageText(totals))
-                }
                 if let wifi = network.wifi, let quality = wifi.signalQuality {
                     // The network's name labels its own signal bar; a row that said
                     // "Signal" and a row that said "Network" would be two lines
