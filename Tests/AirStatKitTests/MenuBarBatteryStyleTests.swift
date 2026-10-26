@@ -219,10 +219,10 @@ struct BatteryIconTests {
         return model.items[0].symbolName
     }
 
-    @Test("charging borrows the system's bolt whatever the level")
-    func chargingShowsTheBolt() {
-        #expect(icon(percent: 34, charging: true) == "battery.100percent.bolt")
-        #expect(icon(percent: 90, charging: true) == "battery.100percent.bolt")
+    @Test("charging takes the plug, whatever the level")
+    func chargingShowsThePlug() {
+        #expect(icon(percent: 34, charging: true) == "powerplug")
+        #expect(icon(percent: 90, charging: true) == "powerplug")
     }
 
     @Test("the level follows the quarters macOS ships glyphs for")
@@ -237,7 +237,7 @@ struct BatteryIconTests {
     @Test("battery Time Remaining shows the same live icon")
     func timeRemainingSharesTheIcon() {
         #expect(icon(percent: 40, charging: true, metric: .batteryTime)
-                == "battery.100percent.bolt")
+                == "powerplug")
     }
 
     @Test("plugged in but not charging takes the plug, like the system's own")
@@ -252,6 +252,31 @@ struct BatteryIconTests {
             settings: Settings(menuBar: MenuBarSettings(items: [config])),
             isStale: false)
         #expect(model.items[0].symbolName == "powerplug")
+    }
+
+    @Test("with an icon the number steps aside for the plug while charging")
+    func iconStyleDropsTheNumberWhileCharging() {
+        var snapshot = SnapshotFixtures.nominal
+        snapshot.power = .value(SnapshotFixtures.power(percent: 76, charging: true))
+        let config = MenuBarItemConfig(metric: .battery, style: .iconAndText)
+        let model = MenuBarRenderModel(
+            snapshot: snapshot, history: SnapshotFixtures.history(),
+            settings: Settings(menuBar: MenuBarSettings(items: [config])),
+            isStale: false)
+        #expect(model.items[0].primary.valueText == "")
+        #expect(model.items[0].accessibilityLabel == "Battery 76%, charging")
+    }
+
+    @Test("a text readout tails its number with the bolt while charging")
+    func textStyleAppendsTheBolt() {
+        var snapshot = SnapshotFixtures.nominal
+        snapshot.power = .value(SnapshotFixtures.power(percent: 76, charging: true))
+        let config = MenuBarItemConfig(metric: .battery, style: .text)
+        let model = MenuBarRenderModel(
+            snapshot: snapshot, history: SnapshotFixtures.history(),
+            settings: Settings(menuBar: MenuBarSettings(items: [config])),
+            isStale: false)
+        #expect(model.items[0].primary.valueText == "76↯")
     }
 
     @Test("with no battery the icon is a plain full battery, not a phantom bolt")

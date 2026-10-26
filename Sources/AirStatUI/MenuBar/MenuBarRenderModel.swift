@@ -188,7 +188,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                settings: Settings) -> MenuBarItemRender {
         let metric = config.metric
         let dash = MetricFormatter.unavailable
-        let widest = formatter.widestSample(for: metric)
+        var widest = formatter.widestSample(for: metric)
 
         var valueText = dash
         var seriesKey: SeriesKey?
@@ -355,6 +355,19 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 valueText = formatter.percentValue(pct)
                 unavailable = false
                 let charge = min(max(pct / 100, 0), 1)
+                if power.isCharging {
+                    let digits = String(Int((charge * 100).rounded()))
+                    if config.style == .iconAndText {
+                        // The plug glyph answers for the number: beside it, "76%"
+                        // would only repeat what the shape already says.
+                        valueText = ""
+                        widest = ""
+                    } else {
+                        // "76↯": power going in, told at the end of the number.
+                        valueText = digits + "↯"
+                        widest += "↯"
+                    }
+                }
                 let isLow = !power.isCharging && charge <= MenuBarItemRender.lowBatteryFraction
                 // Rounded off the clamped charge rather than off the raw percentage, so
                 // the digits and the fill can never disagree about how full it is.
@@ -362,9 +375,9 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                                        isPluggedIn: power.isPluggedIn, isLow: isLow,
                                        valueText: String(Int((charge * 100).rounded())))
                 // The indicator style takes the digits off the screen, so this is the
-                // only place the exact charge is still stated. It says everything the
-                // shape says: the number, that power is going in, that it is low.
-                accessibilityValue = "Battery \(valueText)"
+                // only place the exact charge is still stated — and while charging the
+                // drawn text is a bolt or nothing, so it is spelled from the source.
+                accessibilityValue = "Battery \(formatter.percentValue(pct))"
                 if power.isCharging {
                     accessibilityValue += ", charging"
                 } else if isLow {
@@ -613,10 +626,10 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             // the same two things its indicator does: how full, and whether power
             // is going in. The level follows the quarters macOS ships glyphs for.
             guard let battery else { return "battery.100percent" }
-            // Charging takes the bolt; plugged-in but not charging takes the plug,
-            // which is how the system glyphs say "full on AC" and "charge held".
-            if battery.isCharging { return "battery.100percent.bolt" }
-            if battery.isPluggedIn { return "powerplug" }
+            // On AC power takes the plug — the glyph macOS uses for both "taking
+            // charge" and "charged". A battery-glyph bolt would double the meaning
+            // the plug already carries.
+            if battery.isCharging || battery.isPluggedIn { return "powerplug" }
             switch battery.charge {
             case ..<0.13: return "battery.0percent"
             case ..<0.38: return "battery.25percent"
