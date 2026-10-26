@@ -478,6 +478,14 @@ extension PanelModuleView {
         } else if power.isFullyCharged {
             entries.append(PanelDetailEntry("State", "Charged"))
         }
+        // The pack's instantaneous power. On battery it IS the system draw (the pack
+        // is the only supply); on AC it is the charge rate. systemWatts deliberately
+        // stays nil — the IOKit SystemLoad key was measured disagreeing with the
+        // battery's own Voltage × Amperage by up to 45%.
+        if let watts = power.batteryWatts {
+            entries.append(PanelDetailEntry(power.isCharging ? "Charging at" : "Draw",
+                                            formatter.watts(abs(watts))))
+        }
         if let health = power.healthPercent {
             entries.append(PanelDetailEntry("Health", formatter.percentValue(health)))
         }
