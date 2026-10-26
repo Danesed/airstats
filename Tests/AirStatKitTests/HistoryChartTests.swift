@@ -173,6 +173,26 @@ struct HistoryAxisTests {
         #expect(short == ["-5m", "-3:20", "-1:40", "now"])
     }
 
+    @Test("a month is labelled in dates and an hour in time before now")
+    func monthAndHourLabels() {
+        let end = Date(timeIntervalSince1970: 1_700_000_000)
+        let month = HistoryAxis.labels(span: 30 * 86_400, end: end)
+        #expect(month.last == "now")
+        #expect(month[0] == HistoryAxis.day(end.addingTimeInterval(-30 * 86_400)))
+        let hour = HistoryAxis.labels(span: 3_600, end: end)
+        #expect(hour == ["-1h", "-40m", "-20m", "now"])
+    }
+
+    @Test("each range names its own collecting and summary wording")
+    func rangeWording() {
+        #expect(HistoryRange.recent.collectingText == "Collecting samples…")
+        #expect(HistoryRange.month.collectingText == "Collecting the month…")
+        #expect(HistoryRange.hour.summaryWindow == "the last hour")
+        #expect(HistoryRange.day.summaryWindow == "the last 24 hours")
+        #expect(HistoryRange.month.summaryWindow == "the last 30 days")
+        #expect(HistoryRange.recent.summaryWindow == nil)
+    }
+
     @Test("range segments are labelled in the shortest honest unit")
     func rangeLabels() {
         #expect(HistoryRange.label(forSpan: 60) == "1m")

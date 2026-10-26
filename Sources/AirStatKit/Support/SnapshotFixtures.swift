@@ -385,7 +385,7 @@ public enum SnapshotFixtures {
         let firstCollected = collectedMinutes.map { max(0, capacity - $0) } ?? 0
         for index in 0..<capacity {
             let t = Double(index) / Double(capacity)
-            let date = end.addingTimeInterval(-Double(capacity - index) * MinuteHistory.bucketDuration)
+            let date = end.addingTimeInterval(-Double(capacity - index) * MinuteHistory.defaultBucketDuration)
             day.advance(to: date)
             if index < firstCollected { continue }
             // Asleep from roughly 3 to 5 in the morning of a 24 hour window that ends
@@ -427,6 +427,56 @@ public enum SnapshotFixtures {
             if t > 0.9 { day.note(.memory, name: "Xcode", value: 0.42 + 0.22 * t) }
         }
         return day
+    }
+
+    /// Thirty days of hourly buckets ending at the reference date, with the shape a
+    /// real month has: busy days, quiet nights and weekends, a holiday week the Mac
+    /// spent asleep, and the recent days the day tier also holds.
+    public static func monthHistory(capacity: Int = MinuteHistory.monthCapacity,
+                                    bucketDuration: TimeInterval = MinuteHistory.monthBucketDuration,
+                                    collectedHours: Int? = nil) -> MinuteHistory {
+        var month = MinuteHistory(capacity: capacity, bucketDuration: bucketDuration)
+        let end = referenceDate
+        let firstCollected = collectedHours.map { max(0, capacity - $0) } ?? 0
+        for index in 0..<capacity {
+            let t = Double(index) / Double(capacity)
+            let date = end.addingTimeInterval(-Double(capacity - index) * bucketDuration)
+            month.advance(to: date)
+            if index < firstCollected { continue }
+            // A week's holiday in the middle of the window, slept through.
+            if t > 0.45 && t < 0.68 { continue }
+            let hour = Calendar.current.component(.hour, from: date)
+            let weekday = Calendar.current.component(.weekday, from: date)
+            let weekend = weekday == 1 || weekday == 7
+            let workingHours = (9...18).contains(hour)
+            let awake = hour >= 8 && hour <= 23
+            guard awake else { continue }
+            let work = workingHours && !weekend ? 0.20 : 0.05
+            let wobble = 0.04 * sin(t * Double.pi * 120) + 0.03 * sin(t * Double.pi * 31 + 0.4)
+            var spike: Double = 0
+            if t > 0.82 && t < 0.85 { spike = 0.45 * (1 - abs(t - 0.835) / 0.015) }
+            let cpu = min(0.99, max(0.02, 0.05 + work + wobble + spike))
+            for jitter in [0.85, 1.15] {
+                let sample = min(0.99, cpu * jitter)
+                month.record(.cpuTotal, sample)
+                month.record(.cpuUser, sample * 0.62)
+                month.record(.cpuSystem, sample * 0.38)
+                month.record(.cpuPerformance, min(0.99, sample * 1.15))
+                month.record(.cpuEfficiency, sample * 0.7)
+                month.record(.memoryUsed, min(0.95, 0.40 + 0.18 * t + 0.03 * sin(t * Double.pi * 11) * jitter))
+                month.record(.memoryPressure, 0.2 + 0.10 * sin(t * Double.pi * 5) * jitter)
+                month.record(.gpuUtilization, max(0, 0.04 + 0.4 * spike + 0.06 * sin(t * Double.pi * 47) * jitter))
+                month.record(.networkDownload, max(0, (400_000 + 1_800_000 * work * 4 * abs(sin(t * Double.pi * 53))) * jitter))
+                month.record(.networkUpload, max(0, (60_000 + 200_000 * work * abs(sin(t * Double.pi * 29))) * jitter))
+                month.record(.diskRead, max(0, (900_000 + 8_000_000 * spike + 2_000_000 * work * abs(sin(t * Double.pi * 41))) * jitter))
+                month.record(.diskWrite, max(0, (300_000 + 1_200_000 * work * abs(sin(t * Double.pi * 23))) * jitter))
+                month.record(.batteryPercent, max(8, min(100, 55 + 40 * sin(t * Double.pi * 60))))
+                month.record(.batteryPlugged, workingHours ? 1 : 0)
+                month.record(.cpuTemperature, 40 + 20 * sample)
+                month.record(.fanRPM, sample > 0.45 ? 1_400 + 3_200 * sample : 0)
+            }
+        }
+        return month
     }
 
 }

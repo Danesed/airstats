@@ -1,21 +1,44 @@
 import SwiftUI
 import AirStatKit
 
-/// Which of the two windows a history chart is showing.
+/// Which window a history chart is showing.
 ///
-/// Two fixed ranges and no picker. The first is whatever "Keep history for" already
-/// is, so the chart footer never grows a second retention control next to the one in
-/// Settings; the second is the day the minute tier keeps.
+/// Fixed ranges and no picker: the first is whatever "Keep history for" already is,
+/// so the chart footer never grows a second retention control next to the one in
+/// Settings; the rest are the spans the bucket tiers keep — an hour of the day's
+/// minutes, the day itself, and the month of hours.
 public enum HistoryRange: Equatable, Sendable, CaseIterable {
     case recent
+    case hour
     case day
+    case month
 
-    /// "5m", "1h", "24h": short enough for a two segment control in a chart footer.
+    /// "5m", "1h", "24h": short enough for a segment control in a chart footer.
     public static func label(forSpan span: TimeInterval) -> String {
         if span < 60 { return "\(Int(span.rounded()))s" }
         if span < 3_600 { return "\(Int((span / 60).rounded()))m" }
         let hours = span / 3_600
         return hours == hours.rounded() ? "\(Int(hours))h" : String(format: "%.1fh", hours)
+    }
+
+    /// What an empty plot says it is still gathering.
+    var collectingText: String {
+        switch self {
+        case .day: return "Collecting the day…"
+        case .month: return "Collecting the month…"
+        case .recent, .hour: return "Collecting samples…"
+        }
+    }
+
+    /// The span words the spoken summary uses, or nil to fall back to a measured
+    /// "last N" caption: only the bucket windows whose span is exact get a name.
+    var summaryWindow: String? {
+        switch self {
+        case .hour: return "the last hour"
+        case .day: return "the last 24 hours"
+        case .month: return "the last 30 days"
+        case .recent: return nil
+        }
     }
 }
 
@@ -369,13 +392,17 @@ enum HistoryAxis {
     /// Four labels for a window of `span` seconds ending at `end`.
     ///
     /// A day is labelled in clock time, because "what was that at 3am" is the
-    /// question a day answers. Anything shorter is labelled as time before now,
-    /// because the clock time of a sample four minutes ago is not what anyone is
-    /// asking. Thirds rather than quarters: four labels over 300 points is what fits,
-    /// and thirds of the shipped spans are all whole seconds.
+    /// question a day answers, and a month in dates, because no clock time
+    /// distinguishes one Tuesday from the next. Anything shorter is labelled as
+    /// time before now, because the clock time of a sample four minutes ago is not
+    /// what anyone is asking. Thirds rather than quarters: four labels over 300
+    /// points is what fits, and thirds of the shipped spans are all whole seconds.
     static func labels(span: TimeInterval, end: Date) -> [String] {
         marks.map { mark in
             if mark >= 1 { return "now" }
+            if span > 86_400 {
+                return day(end.addingTimeInterval(-span * (1 - mark)))
+            }
             if span >= 7_200 {
                 return clock(end.addingTimeInterval(-span * (1 - mark)))
             }
@@ -385,6 +412,16 @@ enum HistoryAxis {
 
     static func clock(_ date: Date) -> String {
         date.formatted(Date.FormatStyle(date: .omitted, time: .shortened))
+    }
+
+    /// "Mar 4": the date a month-long axis reads in.
+    static func day(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle().month(.abbreviated).day())
+    }
+
+    /// "Mar 4, 3 PM": date and hour for a month scrubbed at its bucket size.
+    static func dayAndTime(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle().month(.abbreviated).day().hour())
     }
 
     /// "-5m", "-3:20", "-40s": how long before now a point on the axis is.

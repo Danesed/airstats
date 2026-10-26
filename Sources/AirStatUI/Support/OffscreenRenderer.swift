@@ -336,7 +336,11 @@ enum PreviewEngine {
         engine.loadFixture(snapshot: request.scenario.snapshot,
                            history: request.withoutHistory ? MetricHistory() : request.scenario.history,
                            dayHistory: request.withoutHistory ? MinuteHistory()
-                               : request.scenario.dayHistory(collectedMinutes: request.collectedMinutes))
+                               : request.scenario.dayHistory(collectedMinutes: request.collectedMinutes),
+                           monthHistory: request.withoutHistory
+                               ? MinuteHistory(capacity: MinuteHistory.monthCapacity,
+                                               bucketDuration: MinuteHistory.monthBucketDuration)
+                               : SnapshotFixtures.monthHistory())
         engineCache[key] = engine
         return engine
     }

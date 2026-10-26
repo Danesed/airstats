@@ -36,6 +36,7 @@ extension PanelModuleView {
             HistoryChart(series,
                          history: engine.history,
                          day: engine.dayHistory,
+                         month: engine.monthHistory,
                          settings: settings.settings.charts,
                          tint: chartTint,
                          band: bandTint,

@@ -1,44 +1,54 @@
 import Foundation
 
-/// A day of every series, one minute at a time.
+/// A fixed span of every series, one bucket at a time.
 ///
 /// The raw ring keeps every sample for the "Keep history for" span and is cleared on
-/// wake, because a rate that spans a sleep is meaningless. This tier keeps the last
-/// 24 hours as one bucket per minute, each holding the minimum, the sum and the
-/// maximum of the samples that fell in it, and it is never cleared: a minute with no
-/// samples is a gap, and a gap is a fact about the day worth drawing.
+/// wake, because a rate that spans a sleep is meaningless. This tier keeps one
+/// bucket per `bucketDuration` — the day tier's minutes, the month tier's hours —
+/// each holding the minimum, the sum and the maximum of the samples that fell in
+/// it, and it is never cleared: a bucket with no samples is a gap, and a gap is a
+/// fact about the span worth drawing.
 ///
 /// Storage is flat and index-addressed rather than a dictionary keyed by `SeriesKey`.
 /// The fold runs 21 times per sample for the life of the process, and hashing a
 /// string-backed key each time measured at about forty times the cost of an array
-/// index. Buckets are anchored to absolute minutes, so a chart drawn from this slides
-/// one column per minute instead of shimmering as samples land, and a gap falls out
-/// of the arithmetic: minutes that pass with no sample are emptied as the newest
-/// bucket moves over them.
+/// index. Buckets are anchored to absolute wall-clock boundaries, so a chart drawn
+/// from this slides one column per bucket instead of shimmering as samples land,
+/// and a gap falls out of the arithmetic: buckets that pass with no sample are
+/// emptied as the newest bucket moves over them.
 ///
 /// About 420 KB at the default capacity, allocated once.
 public struct MinuteHistory: Sendable, Equatable {
-    public static let bucketDuration: TimeInterval = 60
-    /// 24 hours.
+    /// One minute, the day tier's granularity.
+    public static let defaultBucketDuration: TimeInterval = 60
+    /// 24 hours at one bucket per minute.
     public static let defaultCapacity = 1440
+    /// One hour, the month tier's granularity.
+    public static let monthBucketDuration: TimeInterval = 3_600
+    /// 30 days at one bucket per hour.
+    public static let monthCapacity = 30 * 24
 
     public let capacity: Int
+    /// Seconds one bucket covers: 60 for the day, 3600 for the month.
+    public let bucketDuration: TimeInterval
     private var minima: [Float]
     private var maxima: [Float]
     private var sums: [Float]
     private var counts: [UInt16]
-    /// The process at the top of the list in minutes that earned a look, one per
-    /// kind per bucket. Only the sample that was highest in the minute keeps its
+    /// The process at the top of the list in buckets that earned a look, one per
+    /// kind per bucket. Only the sample that was highest in the bucket keeps its
     /// name, so a bucket's note is the process behind its high, not its last.
     private var notes: [MinuteNote?]
-    /// Whole minutes since 1970 of the newest bucket, nil until the first sample.
-    public private(set) var newestMinute: Int?
+    /// Whole buckets since 1970 of the newest bucket, nil until the first sample.
+    public private(set) var newestBucket: Int?
 
     private static let seriesCount = SeriesKey.allCases.count
 
-    public init(capacity: Int = MinuteHistory.defaultCapacity) {
+    public init(capacity: Int = MinuteHistory.defaultCapacity,
+                bucketDuration: TimeInterval = MinuteHistory.defaultBucketDuration) {
         let cap = max(2, capacity)
         self.capacity = cap
+        self.bucketDuration = bucketDuration
         let cells = Self.seriesCount * cap
         minima = [Float](repeating: .greatestFiniteMagnitude, count: cells)
         maxima = [Float](repeating: -.greatestFiniteMagnitude, count: cells)
@@ -47,42 +57,44 @@ public struct MinuteHistory: Sendable, Equatable {
         notes = [MinuteNote?](repeating: nil, count: NoteKind.allCases.count * cap)
     }
 
-    public static func minute(of date: Date) -> Int {
+    /// Which bucket `date` falls in, counted in whole buckets since 1970.
+    public func bucket(of date: Date) -> Int {
         Int((date.timeIntervalSince1970 / bucketDuration).rounded(.down))
     }
 
-    public static func date(ofMinute minute: Int) -> Date {
-        Date(timeIntervalSince1970: Double(minute) * bucketDuration)
+    /// The wall-clock instant bucket `index` starts at.
+    public func date(ofBucket index: Int) -> Date {
+        Date(timeIntervalSince1970: Double(index) * bucketDuration)
     }
 
-    /// Moves the newest bucket to the minute containing `date`, emptying every bucket
+    /// Moves the newest bucket to the one containing `date`, emptying every bucket
     /// between there and the previous newest.
     ///
     /// Called once per snapshot, before any series is recorded: 21 series cross a
-    /// minute boundary at the same instant, and asking each of them would pay the
-    /// comparison 21 times. A jump of a day or more empties the whole tier. A clock
+    /// bucket boundary at the same instant, and asking each of them would pay the
+    /// comparison 21 times. A jump of a whole tier or more empties it. A clock
     /// that goes backwards keeps writing into the newest bucket rather than into the
-    /// past, so an NTP correction cannot resurrect a minute the chart has already
+    /// past, so an NTP correction cannot resurrect a bucket the chart has already
     /// drawn.
     public mutating func advance(to date: Date) {
-        let minute = Self.minute(of: date)
-        guard let newest = newestMinute else {
-            newestMinute = minute
+        let bucket = bucket(of: date)
+        guard let newest = newestBucket else {
+            newestBucket = bucket
             return
         }
-        guard minute > newest else { return }
-        if minute - newest >= capacity {
+        guard bucket > newest else { return }
+        if bucket - newest >= capacity {
             clearAll()
         } else {
-            for passed in (newest + 1)...minute { clear(slot: slot(of: passed)) }
+            for passed in (newest + 1)...bucket { clear(slot: slot(of: passed)) }
         }
-        newestMinute = minute
+        newestBucket = bucket
     }
 
     /// Folds one sample into the newest bucket. Non-finite values are dropped rather
     /// than coerced, so they cannot pull a minimum to zero.
     public mutating func record(_ key: SeriesKey, _ value: Double) {
-        guard let newest = newestMinute else { return }
+        guard let newest = newestBucket else { return }
         let sample = Float(value)
         guard sample.isFinite else { return }
         let cell = index(of: key, slot: slot(of: newest))
@@ -94,9 +106,9 @@ public struct MinuteHistory: Sendable, Equatable {
 
     /// Names the process behind the newest bucket's high for `kind`, where `value`
     /// is the machine-wide reading the process list was taken at. A later, higher
-    /// sample in the same minute replaces the name; a lower one leaves it.
+    /// sample in the same bucket replaces the name; a lower one leaves it.
     public mutating func note(_ kind: NoteKind, name: String, value: Double) {
-        guard let newest = newestMinute, !name.isEmpty else { return }
+        guard let newest = newestBucket, !name.isEmpty else { return }
         let sample = Float(value)
         guard sample.isFinite else { return }
         let cell = kind.rawValue * capacity + slot(of: newest)
@@ -104,19 +116,20 @@ public struct MinuteHistory: Sendable, Equatable {
         notes[cell] = MinuteNote(name: name, value: sample)
     }
 
-    /// The note for `kind` in the bucket holding `date`, if that minute earned one.
+    /// The note for `kind` in the bucket holding `date`, if that bucket earned one.
     public func note(_ kind: NoteKind, at date: Date) -> MinuteNote? {
-        guard let newest = newestMinute else { return nil }
-        let minute = Self.minute(of: date)
-        guard minute <= newest, minute > newest - capacity else { return nil }
-        return notes[kind.rawValue * capacity + slot(of: minute)]
+        guard let newest = newestBucket else { return nil }
+        let bucket = bucket(of: date)
+        guard bucket <= newest, bucket > newest - capacity else { return nil }
+        return notes[kind.rawValue * capacity + slot(of: bucket)]
     }
 
-    /// The last `capacity` minutes of one series, oldest first, ending at the newest
+    /// The last `capacity` buckets of one series, oldest first, ending at the newest
     /// bucket. Allocates four arrays; call once per render, not per point.
     public func series(_ key: SeriesKey) -> MinuteSeries {
-        guard let newest = newestMinute else {
-            return MinuteSeries(key: key, capacity: capacity, end: Date())
+        guard let newest = newestBucket else {
+            return MinuteSeries(key: key, capacity: capacity, end: Date(),
+                                bucketDuration: bucketDuration)
         }
         var lows = [Float](repeating: 0, count: capacity)
         var means = [Float](repeating: 0, count: capacity)
@@ -125,8 +138,8 @@ public struct MinuteHistory: Sendable, Equatable {
         var named: [Int: String] = [:]
         let kind = NoteKind(explaining: key)
         let oldest = newest - capacity + 1
-        for (position, minute) in (oldest...newest).enumerated() {
-            let slot = slot(of: minute)
+        for (position, bucket) in (oldest...newest).enumerated() {
+            let slot = slot(of: bucket)
             let cell = index(of: key, slot: slot)
             let count = counts[cell]
             guard count > 0 else { continue }
@@ -140,14 +153,14 @@ public struct MinuteHistory: Sendable, Equatable {
         }
         return MinuteSeries(key: key, minima: lows, averages: means, maxima: highs,
                             counts: samples, notes: named,
-                            end: Self.date(ofMinute: newest + 1))
+                            end: date(ofBucket: newest + 1), bucketDuration: bucketDuration)
     }
 
     /// True when any series has a sample in any bucket.
     public var isEmpty: Bool { !counts.contains { $0 > 0 } }
 
-    private func slot(of minute: Int) -> Int {
-        let wrapped = minute % capacity
+    private func slot(of bucket: Int) -> Int {
+        let wrapped = bucket % capacity
         return wrapped < 0 ? wrapped + capacity : wrapped
     }
 
@@ -232,7 +245,7 @@ public struct MinuteNote: Sendable, Equatable {
     }
 }
 
-/// One series' day, as a chart draws it: parallel arrays, oldest bucket first.
+/// One series' tier, as a chart draws it: parallel arrays, oldest bucket first.
 ///
 /// A value handed out by `MinuteHistory.series(_:)` rather than a view into it, so a
 /// chart holding one cannot force the tier to copy 420 KB on the next fold. Buckets
@@ -248,7 +261,7 @@ public struct MinuteSeries: Sendable, Equatable {
     public let notes: [Int: String]
     /// End of the newest bucket.
     public let end: Date
-    public let bucketDuration: TimeInterval = MinuteHistory.bucketDuration
+    public let bucketDuration: TimeInterval
 
     /// Extremes and the count-weighted mean over every sampled bucket.
     public let minimum: Double
@@ -262,7 +275,8 @@ public struct MinuteSeries: Sendable, Equatable {
     public let last: Double?
 
     public init(key: SeriesKey, minima: [Float], averages: [Float], maxima: [Float],
-                counts: [UInt16], notes: [Int: String] = [:], end: Date) {
+                counts: [UInt16], notes: [Int: String] = [:], end: Date,
+                bucketDuration: TimeInterval = MinuteHistory.defaultBucketDuration) {
         precondition(minima.count == counts.count && averages.count == counts.count
                      && maxima.count == counts.count, "MinuteSeries arrays disagree")
         self.key = key
@@ -272,6 +286,7 @@ public struct MinuteSeries: Sendable, Equatable {
         self.counts = counts
         self.notes = notes
         self.end = end
+        self.bucketDuration = bucketDuration
 
         var lo = Float.greatestFiniteMagnitude
         var hi = -Float.greatestFiniteMagnitude
@@ -296,14 +311,15 @@ public struct MinuteSeries: Sendable, Equatable {
         last = newest.map { Double(averages[$0]) }
     }
 
-    /// An unsampled day of `capacity` buckets.
-    public init(key: SeriesKey, capacity: Int, end: Date) {
+    /// An unsampled window of `capacity` buckets.
+    public init(key: SeriesKey, capacity: Int, end: Date,
+                bucketDuration: TimeInterval = MinuteHistory.defaultBucketDuration) {
         self.init(key: key,
                   minima: [Float](repeating: 0, count: capacity),
                   averages: [Float](repeating: 0, count: capacity),
                   maxima: [Float](repeating: 0, count: capacity),
                   counts: [UInt16](repeating: 0, count: capacity),
-                  end: end)
+                  end: end, bucketDuration: bucketDuration)
     }
 
     public var count: Int { counts.count }
@@ -311,6 +327,26 @@ public struct MinuteSeries: Sendable, Equatable {
     /// Wall clock the whole window covers, sampled or not.
     public var span: TimeInterval { Double(count) * bucketDuration }
     public var start: Date { end.addingTimeInterval(-span) }
+
+    /// The same window cut to its newest `buckets` buckets, so a chart can draw a
+    /// shorter span out of a longer tier. The shared `end` is kept: a trailing
+    /// hour of a day is still the day, just narrower.
+    public func trailing(_ buckets: Int) -> MinuteSeries {
+        let keep = Swift.min(buckets, count)
+        guard keep < count else { return self }
+        let offset = count - keep
+        var kept: [Int: String] = [:]
+        for (position, name) in notes where position >= offset {
+            kept[position - offset] = name
+        }
+        return MinuteSeries(key: key,
+                            minima: Array(minima[offset...]),
+                            averages: Array(averages[offset...]),
+                            maxima: Array(maxima[offset...]),
+                            counts: Array(counts[offset...]),
+                            notes: kept,
+                            end: end, bucketDuration: bucketDuration)
+    }
 
     /// Start of the bucket at `index`.
     public func date(at index: Int) -> Date {
@@ -330,10 +366,10 @@ extension MinuteHistory {
     /// the notes as a count and a run of (cell, value, length, UTF-8) entries, all
     /// little-endian. About 350 KB at the default capacity plus a few bytes per
     /// note. Read back only when every field of the header matches what this build
-    /// would write, so a file from a different capacity or series set is treated as
-    /// absent, never as data.
+    /// would write, so a file from a different capacity, bucket duration or series
+    /// set is treated as absent, never as data.
     private static let magic: UInt32 = 0x4149_5248
-    private static let formatVersion: UInt32 = 2
+    private static let formatVersion: UInt32 = 3
     /// Bytes of name a note keeps on disk. Longer names are cut, not refused: a
     /// process name is a label, and 48 bytes of it identifies the process.
     private static let noteNameLimit = 48
@@ -345,8 +381,9 @@ extension MinuteHistory {
         append(Self.magic.littleEndian)
         append(Self.formatVersion.littleEndian)
         append(UInt32(capacity).littleEndian)
+        append(UInt32(bucketDuration).littleEndian)
         append(UInt32(Self.seriesCount).littleEndian)
-        append(Int64(newestMinute ?? -1).littleEndian)
+        append(Int64(newestBucket ?? -1).littleEndian)
         minima.withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
         maxima.withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
         sums.withUnsafeBufferPointer { data.append(Data(buffer: $0)) }
@@ -365,7 +402,8 @@ extension MinuteHistory {
     }
 
     /// Nil for anything that is not exactly a file this build wrote.
-    public init?(encoded data: Data, capacity expected: Int = MinuteHistory.defaultCapacity) {
+    public init?(encoded data: Data, capacity expectedCapacity: Int = MinuteHistory.defaultCapacity,
+                 bucketDuration expectedDuration: TimeInterval = MinuteHistory.defaultBucketDuration) {
         var offset = 0
         func read<T: FixedWidthInteger>(_: T.Type) -> T? {
             let size = MemoryLayout<T>.size
@@ -377,7 +415,8 @@ extension MinuteHistory {
         }
         guard read(UInt32.self) == Self.magic,
               read(UInt32.self) == Self.formatVersion,
-              let capacity = read(UInt32.self).map(Int.init), capacity == expected,
+              let capacity = read(UInt32.self).map(Int.init), capacity == expectedCapacity,
+              let duration = read(UInt32.self).map({ TimeInterval($0) }), duration == expectedDuration,
               let series = read(UInt32.self).map(Int.init), series == Self.seriesCount,
               let newest = read(Int64.self) else { return nil }
         let cells = series * capacity
@@ -389,6 +428,7 @@ extension MinuteHistory {
             return data[offset..<(offset + floats)].withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
         }
         self.capacity = capacity
+        self.bucketDuration = duration
         minima = floatArray()
         maxima = floatArray()
         sums = floatArray()
@@ -408,43 +448,43 @@ extension MinuteHistory {
         }
         guard offset == data.count else { return nil }
         notes = restored
-        newestMinute = newest >= 0 ? Int(newest) : nil
+        newestBucket = newest >= 0 ? Int(newest) : nil
     }
 
 
     /// Seconds between the oldest sampled bucket of one series and the end of the
     /// window, without allocating the series.
     public func collectedSpan(of key: SeriesKey) -> TimeInterval {
-        guard let newest = newestMinute else { return 0 }
+        guard let newest = newestBucket else { return 0 }
         let oldest = newest - capacity + 1
-        for (position, minute) in (oldest...newest).enumerated()
-        where counts[index(of: key, slot: slot(of: minute))] > 0 {
-            return Double(capacity - position) * Self.bucketDuration
+        for (position, bucket) in (oldest...newest).enumerated()
+        where counts[index(of: key, slot: slot(of: bucket))] > 0 {
+            return Double(capacity - position) * bucketDuration
         }
         return 0
     }
 }
 
-/// Where the day lives between launches.
+/// Where a tier lives between launches.
 ///
 /// Written at quit, on the way into sleep, and once an hour, so a relaunch or an
-/// update opens on the day it had rather than on an empty axis. Restoring is safe
-/// because buckets are anchored to wall-clock minutes: the first sample after
-/// launch advances the tier and the time the app was not running becomes the gap
-/// it was.
+/// update opens on the span it had rather than on an empty axis. Restoring is safe
+/// because buckets are anchored to the wall clock: the first sample after launch
+/// advances the tier and the time the app was not running becomes the gap it was.
 public struct MinuteHistoryFile: Sendable {
     public let url: URL
 
-    public init(directory: URL) {
-        url = directory.appendingPathComponent("history.bin")
+    public init(directory: URL, name: String = "history.bin") {
+        url = directory.appendingPathComponent(name)
     }
 
     public func save(_ history: MinuteHistory) {
         try? history.encoded().write(to: url, options: .atomic)
     }
 
-    public func load(capacity: Int = MinuteHistory.defaultCapacity) -> MinuteHistory? {
+    public func load(capacity: Int = MinuteHistory.defaultCapacity,
+                     bucketDuration: TimeInterval = MinuteHistory.defaultBucketDuration) -> MinuteHistory? {
         guard let data = try? Data(contentsOf: url) else { return nil }
-        return MinuteHistory(encoded: data, capacity: capacity)
+        return MinuteHistory(encoded: data, capacity: capacity, bucketDuration: bucketDuration)
     }
 }

@@ -96,7 +96,7 @@ struct MinuteHistoryTests {
         day.advance(to: date(minute: 7))
         day.record(.cpuTotal, 3)
         let series = day.series(.cpuTotal)
-        #expect(day.newestMinute == 10)
+        #expect(day.newestBucket == 10)
         #expect(series.counts.last == 2)
         #expect(series.averages.last == 2)
     }
@@ -220,7 +220,7 @@ struct MinuteHistoryFileTests {
         let decoded = MinuteHistory(encoded: day.encoded(), capacity: 8)
         #expect(decoded == day)
         #expect(decoded?.series(.cpuTotal) == day.series(.cpuTotal))
-        #expect(decoded?.newestMinute == 5)
+        #expect(decoded?.newestBucket == 5)
     }
 
     @Test("a file from another capacity, a truncated one, or garbage is absent, not data")
@@ -236,7 +236,7 @@ struct MinuteHistoryFileTests {
     func emptyDay() {
         let decoded = MinuteHistory(encoded: MinuteHistory(capacity: 4).encoded(), capacity: 4)
         #expect(decoded?.isEmpty == true)
-        #expect(decoded?.newestMinute == nil)
+        #expect(decoded?.newestBucket == nil)
     }
 
     @Test("the store writes and reads the file, and a restored day resumes with a gap")
@@ -254,6 +254,52 @@ struct MinuteHistoryFileTests {
         restored.advance(to: Date(timeIntervalSince1970: 8 * 60))
         restored.record(.cpuTotal, 0.9)
         #expect(restored.series(.cpuTotal).counts.map { Int($0) } == [1, 1, 1, 1, 1, 0, 0, 1])
+    }
+
+    @Test("an hourly tier folds by the hour and its file round trips")
+    func hourlyTier() {
+        var month = MinuteHistory(capacity: 8, bucketDuration: 3_600)
+        month.advance(to: Date(timeIntervalSince1970: 100 * 3_600 + 120))
+        month.record(.cpuTotal, 0.2)
+        month.advance(to: Date(timeIntervalSince1970: 100 * 3_600 + 3_000))
+        month.record(.cpuTotal, 0.6)
+        let series = month.series(.cpuTotal)
+        // Two samples forty-eight minutes apart land in the same hour.
+        #expect(series.counts.last == 2)
+        #expect(abs(series.averages.last! - 0.4) < 0.0001)
+        #expect(series.span == 8 * 3_600)
+
+        let decoded = MinuteHistory(encoded: month.encoded(), capacity: 8, bucketDuration: 3_600)
+        #expect(decoded == month)
+        // A file read at the wrong bucket size is refused rather than mis-timed.
+        #expect(MinuteHistory(encoded: month.encoded(), capacity: 8) == nil)
+    }
+
+    @Test("the month file keeps its own name beside the day's")
+    func monthFile() {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AirStatTests-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let monthFile = MinuteHistoryFile(directory: dir, name: "history-30d.bin")
+        #expect(monthFile.load(capacity: 8, bucketDuration: 3_600) == nil)
+        var month = MinuteHistory(capacity: 8, bucketDuration: 3_600)
+        month.advance(to: Date(timeIntervalSince1970: 100 * 3_600))
+        month.record(.cpuTotal, 0.5)
+        monthFile.save(month)
+        #expect(monthFile.load(capacity: 8, bucketDuration: 3_600) != nil)
+        // The day file is untouched by the month's existence.
+        #expect(MinuteHistoryFile(directory: dir).load(capacity: 8) == nil)
+    }
+
+    @Test("the fixture month is thirty days of hours, with a gap in it")
+    func fixtureMonthShape() {
+        let series = SnapshotFixtures.monthHistory().series(.cpuTotal)
+        #expect(series.count == 30 * 24)
+        #expect(series.bucketDuration == 3_600)
+        #expect(series.counts.contains(0))
+        #expect(series.counts.last! > 0)
+        #expect(series.maximum > series.minimum)
+        #expect(series.end == SnapshotFixtures.referenceDate)
     }
 
     @Test("collected span is measured from the oldest sampled bucket of that series")

@@ -20,6 +20,13 @@ public final class MetricsEngine {
     /// `setSuspensionReason`.
     public private(set) var dayHistory = MinuteHistory()
 
+    /// The last 30 days, one bucket per hour — about 210 KB allocated once.
+    /// Same wall-clock anchoring as the day tier, so sleep reads as a gap there
+    /// too rather than erasing the month.
+    public private(set) var monthHistory = MinuteHistory(
+        capacity: MinuteHistory.monthCapacity,
+        bucketDuration: MinuteHistory.monthBucketDuration)
+
     public private(set) var activity: SamplingActivity = .menuBar
 
     /// Wall-clock time of the last snapshot, for the "updated Xs ago" affordance.
@@ -40,7 +47,8 @@ public final class MetricsEngine {
 
     private let settingsStore: SettingsStore
     private let dayHistoryFile: MinuteHistoryFile
-    /// The newest minute the day was last written at, so the hourly save is a
+    private let monthHistoryFile: MinuteHistoryFile
+    /// The newest bucket the day was last written at, so the hourly save is a
     /// subtraction per sample and not a timer.
     private var dayHistorySavedMinute: Int?
     private var core: SamplingCore?
@@ -71,17 +79,25 @@ public final class MetricsEngine {
         let s = settingsStore.settings
         self.history = MetricHistory(capacity: s.historyCapacity,
                                      sampleInterval: s.general.updateInterval)
-        self.dayHistoryFile = MinuteHistoryFile(
-            directory: settingsStore.settingsFileURL.deletingLastPathComponent())
+        let directory = settingsStore.settingsFileURL.deletingLastPathComponent()
+        self.dayHistoryFile = MinuteHistoryFile(directory: directory)
+        self.monthHistoryFile = MinuteHistoryFile(directory: directory, name: "history-30d.bin")
     }
 
     // MARK: Lifecycle
 
     public func start() {
         guard core == nil else { return }
-        if dayHistory.isEmpty, let saved = dayHistoryFile.load(capacity: dayHistory.capacity) {
+        if dayHistory.isEmpty,
+           let saved = dayHistoryFile.load(capacity: dayHistory.capacity,
+                                           bucketDuration: dayHistory.bucketDuration) {
             dayHistory = saved
-            dayHistorySavedMinute = saved.newestMinute
+            dayHistorySavedMinute = saved.newestBucket
+        }
+        if monthHistory.isEmpty,
+           let saved = monthHistoryFile.load(capacity: monthHistory.capacity,
+                                             bucketDuration: monthHistory.bucketDuration) {
+            monthHistory = saved
         }
         let core = SamplingCore { [weak self] snapshot in
             self?.ingest(snapshot)
@@ -104,7 +120,8 @@ public final class MetricsEngine {
         // Synchronous: this runs from the app's termination path, where a detached
         // write would not get to finish.
         dayHistoryFile.save(dayHistory)
-        dayHistorySavedMinute = dayHistory.newestMinute
+        monthHistoryFile.save(monthHistory)
+        dayHistorySavedMinute = dayHistory.newestBucket
         observationTask?.cancel()
         observationTask = nil
         settingsApplyTask?.cancel()
@@ -207,7 +224,7 @@ public final class MetricsEngine {
         guard oldReasons != suspensionReasons else { return }
 
         if !suspensionReasons.isEmpty {
-            if oldReasons.isEmpty { saveDayHistory() }
+            if oldReasons.isEmpty { saveHistories() }
             updateActivity()
             return
         }
@@ -350,20 +367,24 @@ public final class MetricsEngine {
 
     /// Fold a snapshot into history. Only series whose metric is actually available
     /// are appended — a missing sensor leaves a gap rather than a fabricated zero.
-    /// Writes the day off the main actor. The tier is a value, so the copy handed
-    /// to the task is the snapshot being saved and later samples cannot race it.
-    private func saveDayHistory() {
-        let snapshot = dayHistory
-        let file = dayHistoryFile
-        dayHistorySavedMinute = snapshot.newestMinute
-        Task.detached(priority: .utility) { file.save(snapshot) }
+    /// Writes the tiers off the main actor. A tier is a value, so the copy handed
+    /// to the task is the state being saved and later samples cannot race it.
+    private func saveHistories() {
+        let day = dayHistory
+        let dayFile = dayHistoryFile
+        dayHistorySavedMinute = day.newestBucket
+        Task.detached(priority: .utility) { dayFile.save(day) }
+        let month = monthHistory
+        let monthFile = monthHistoryFile
+        Task.detached(priority: .utility) { monthFile.save(month) }
     }
 
     private func record(_ s: SystemSnapshot) {
         history.markSampleDate(s.capturedAt)
         dayHistory.advance(to: s.capturedAt)
-        if let newest = dayHistory.newestMinute, newest - (dayHistorySavedMinute ?? newest) >= 60 {
-            saveDayHistory()
+        monthHistory.advance(to: s.capturedAt)
+        if let newest = dayHistory.newestBucket, newest - (dayHistorySavedMinute ?? newest) >= 60 {
+            saveHistories()
         }
 
         if let cpu = s.cpu.value {
@@ -409,10 +430,11 @@ public final class MetricsEngine {
         }
     }
 
-    /// One sample into both tiers.
+    /// One sample into all three tiers.
     private func fold(_ key: SeriesKey, _ value: Double) {
         history.record(key, value)
         dayHistory.record(key, value)
+        monthHistory.record(key, value)
     }
 
     /// The process at the top of a fresh list, against the minute it was seen in.
@@ -456,10 +478,14 @@ public final class MetricsEngine {
     /// binary and is how the UI gets reviewed, and a fixture path that only exists in
     /// debug builds cannot verify what release builds actually draw.
     public func loadFixture(snapshot: SystemSnapshot, history: MetricHistory,
-                            dayHistory: MinuteHistory = MinuteHistory()) {
+                            dayHistory: MinuteHistory = MinuteHistory(),
+                            monthHistory: MinuteHistory = MinuteHistory(
+                                capacity: MinuteHistory.monthCapacity,
+                                bucketDuration: MinuteHistory.monthBucketDuration)) {
         self.snapshot = snapshot
         self.history = history
         self.dayHistory = dayHistory
+        self.monthHistory = monthHistory
         self.lastUpdate = snapshot.capturedAt
     }
 

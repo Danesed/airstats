@@ -33,14 +33,16 @@ public struct ModuleHistory: Equatable, Sendable {
     }
 }
 
-/// A module's history, at the span the user keeps and over the last day.
+/// A module's history, at the span the user keeps, over the last hour, day and
+/// month.
 ///
-/// The chart under an expanded module's rows. Two fixed ranges in the footer, where
-/// the time span caption already sits: the "Keep history for" span, drawn from the
-/// raw ring, and 24 hours, drawn from the minute tier as a band between each
-/// column's low and high with the mean through it. Hovering scrubs; the time and the
-/// value go into the footer beside the window statistics, and only a hairline and a
-/// point marker stay on the plot, so nothing covers the data it is describing.
+/// The chart under an expanded module's rows. Four fixed ranges in the footer,
+/// where the time span caption already sits: the "Keep history for" span, drawn
+/// from the raw ring; the last hour and day, drawn from the minute tier as a band
+/// between each column's low and high with the mean through it; and thirty days of
+/// hourly buckets from the month tier. Hovering scrubs; the time and the value go
+/// into the footer beside the window statistics, and only a hairline and a point
+/// marker stay on the plot, so nothing covers the data it is describing.
 ///
 /// Monochrome by the panel's own policy, so the tints are the caller's: the panel
 /// passes its label colours, the desktop widget passes the metric's.
@@ -54,6 +56,7 @@ public struct HistoryChart: View {
     private let module: ModuleHistory
     private let history: MetricHistory
     private let day: MinuteHistory
+    private let month: MinuteHistory
     private let settings: ChartSettings
     private let lineTint: Color
     private let bandTint: Color
@@ -73,6 +76,7 @@ public struct HistoryChart: View {
     public init(_ module: ModuleHistory,
                 history: MetricHistory,
                 day: MinuteHistory,
+                month: MinuteHistory,
                 settings: ChartSettings,
                 tint: Color,
                 band: Color,
@@ -81,6 +85,7 @@ public struct HistoryChart: View {
         self.module = module
         self.history = history
         self.day = day
+        self.month = month
         self.settings = settings
         self.lineTint = tint
         self.bandTint = band
@@ -203,10 +208,12 @@ public struct HistoryChart: View {
             end.addingTimeInterval(-span * (1 - fraction))
         }
 
-        /// A day is read in clock time, a short window as time before now.
+        /// A month is read as date and hour, a day in clock time, a short window
+        /// as time before now.
         func timeLabel(at fraction: Double) -> String {
-            span >= 7_200 ? HistoryAxis.clock(date(at: fraction))
-                          : HistoryAxis.relative(-span * (1 - fraction))
+            if span > 86_400 { return HistoryAxis.dayAndTime(date(at: fraction)) }
+            return span >= 7_200 ? HistoryAxis.clock(date(at: fraction))
+                                 : HistoryAxis.relative(-span * (1 - fraction))
         }
     }
 
@@ -237,12 +244,28 @@ public struct HistoryChart: View {
                           secondary: secondary.map { Track(recent: $0) },
                           shade: shade.map { Track(recent: $0) },
                           domain: module.domain, naturalUpperBound: module.key.naturalUpperBound)
+        case .hour:
+            // The day's own minutes, cut to the newest sixty: one tier answers
+            // both windows, and the hour needs no separate accounting.
+            let minutes = day.series(module.key).trailing(60)
+            return Window(range: .hour, span: minutes.span, end: minutes.end, format: recent.format,
+                          primary: Track(minutes: minutes, recent: recent),
+                          secondary: secondary.map { Track(minutes: day.series($0.key).trailing(60), recent: $0) },
+                          shade: shade.map { Track(minutes: day.series($0.key).trailing(60), recent: $0) },
+                          domain: module.domain, naturalUpperBound: module.key.naturalUpperBound)
         case .day:
             let minutes = day.series(module.key)
             return Window(range: .day, span: minutes.span, end: minutes.end, format: recent.format,
                           primary: Track(minutes: minutes, recent: recent),
                           secondary: secondary.map { Track(minutes: day.series($0.key), recent: $0) },
                           shade: shade.map { Track(minutes: day.series($0.key), recent: $0) },
+                          domain: module.domain, naturalUpperBound: module.key.naturalUpperBound)
+        case .month:
+            let hours = month.series(module.key)
+            return Window(range: .month, span: hours.span, end: hours.end, format: recent.format,
+                          primary: Track(minutes: hours, recent: recent),
+                          secondary: secondary.map { Track(minutes: month.series($0.key), recent: $0) },
+                          shade: shade.map { Track(minutes: month.series($0.key), recent: $0) },
                           domain: module.domain, naturalUpperBound: module.key.naturalUpperBound)
         }
     }
@@ -256,7 +279,7 @@ public struct HistoryChart: View {
         .overlay(alignment: .bottomLeading) { floorLabel(window) }
         .overlay {
             if window.isEmpty {
-                SwiftUI.Text(window.range == .day ? "Collecting the day…" : "Collecting samples…")
+                SwiftUI.Text(window.range.collectingText)
                     .font(Design.Text.micro)
                     .foregroundStyle(Design.Palette.tertiaryText)
                     .accessibilityHidden(true)
@@ -498,7 +521,7 @@ public struct HistoryChart: View {
     }
 
     private func summary(_ window: Window) -> String {
-        let over = window.range == .day ? "the last 24 hours" : ChartCaption.window(window.span)
+        let over = window.range.summaryWindow ?? ChartCaption.window(window.span)
         guard !window.isEmpty else { return "No history yet over \(over)." }
         func sentence(_ label: String, _ track: Track) -> String {
             var text = label
@@ -519,7 +542,7 @@ public struct HistoryChart: View {
     }
 }
 
-/// The two ranges, as a quiet segmented control that fits a chart footer.
+/// The four ranges, as a quiet segmented control that fits a chart footer.
 struct HistoryRangePicker: View {
     @Binding var range: HistoryRange
     let recentLabel: String
@@ -527,7 +550,9 @@ struct HistoryRangePicker: View {
     var body: some View {
         HStack(spacing: Design.Space.xxs) {
             segment(.recent, label: recentLabel)
+            segment(.hour, label: "1h")
             segment(.day, label: "24h")
+            segment(.month, label: "30d")
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Range")
