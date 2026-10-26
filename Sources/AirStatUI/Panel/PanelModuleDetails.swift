@@ -244,6 +244,9 @@ extension PanelModuleView {
                     // after the label, and an IPv6 answer is three times longer again.
                     ReadoutRow("Public IP", publicIP)
                 }
+                if let latency = latencyValue(network.latency) {
+                    ReadoutRow("Latency", latency)
+                }
                 if let wifi = network.wifi, let quality = wifi.signalQuality {
                     // The network's name labels its own signal bar; a row that said
                     // "Signal" and a row that said "Network" would be two lines
@@ -268,6 +271,17 @@ extension PanelModuleView {
         case .value(let address): return address
         case .failure(.unsupported): return nil
         case .failure(.pending): return "Looking up…"
+        case .failure: return MetricFormatter.unavailable
+        }
+    }
+
+    /// The latency row, or nil while the panel is closed — the probe is off then,
+    /// so "no row" is what "not probed" looks like rather than an idle field.
+    private func latencyValue(_ state: MetricState<TimeInterval>) -> String? {
+        switch state {
+        case .value(let seconds): return formatter.fixed(seconds * 1_000, decimals: 0) + " ms"
+        case .failure(.unsupported): return nil
+        case .failure(.pending): return "Probing…"
         case .failure: return MetricFormatter.unavailable
         }
     }

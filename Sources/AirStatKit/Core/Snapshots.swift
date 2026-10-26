@@ -300,6 +300,8 @@ public struct NetworkSnapshot: Sendable, Equatable {
     public var wifi: WiFiInfo?
     public var localIPv4: String?
     public var publicIP: MetricState<String>
+    /// Round-trip seconds to a fixed endpoint, probed only while the panel is open.
+    public var latency: MetricState<TimeInterval>
     public var isVPNActive: Bool
 
     public init(uploadBytesPerSecond: Double = 0, downloadBytesPerSecond: Double = 0,
@@ -308,6 +310,7 @@ public struct NetworkSnapshot: Sendable, Equatable {
                 interfaces: [NetworkInterfaceStats] = [], primaryInterfaceName: String? = nil,
                 connectionType: ConnectionType = .none, wifi: WiFiInfo? = nil,
                 localIPv4: String? = nil, publicIP: MetricState<String> = .pending,
+                latency: MetricState<TimeInterval> = .failure(.unsupported("panel is closed")),
                 isVPNActive: Bool = false) {
         self.uploadBytesPerSecond = uploadBytesPerSecond
         self.downloadBytesPerSecond = downloadBytesPerSecond
@@ -321,6 +324,7 @@ public struct NetworkSnapshot: Sendable, Equatable {
         self.wifi = wifi
         self.localIPv4 = localIPv4
         self.publicIP = publicIP
+        self.latency = latency
         self.isVPNActive = isVPNActive
     }
 }

@@ -191,6 +191,7 @@ public enum SnapshotFixtures {
             // A documentation-range address (RFC 5737), so the fixture shows the row the
             // opt-in lookup fills in without any machine's real address in the source.
             publicIP: .value("203.0.113.42"),
+            latency: .value(0.042),
             isVPNActive: false
         )
     }

@@ -137,6 +137,9 @@ public final class MetricsEngine {
     public func setPanelVisible(_ visible: Bool) {
         guard visible != isPanelVisible else { return }
         isPanelVisible = visible
+        // The latency probe exists for the panel's network module: no open panel,
+        // no probe traffic.
+        core?.setLatencyProbeEnabled(visible)
         updateActivity()
     }
 

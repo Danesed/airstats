@@ -110,12 +110,21 @@ public final class NetworkCollector: MetricSource {
     /// throttle, both of which are its business rather than this collector's.
     private let publicIPLookup = PublicIPFetcher()
 
+    /// The panel's latency row. `SamplingCore` switches it with panel visibility, so
+    /// a closed panel means no probe traffic at all.
+    private let latencyProbe = LatencyProbe()
+
     public init() {}
 
     /// Pushed in from `SamplingCore` when the setting changes, because a collector has
     /// no way to read the settings store and no business acquiring one.
     func setPublicIPLookupEnabled(_ enabled: Bool) {
         publicIPLookup.setEnabled(enabled)
+    }
+
+    /// Same push-down as the IP lookup: the probe runs only while the panel is open.
+    func setLatencyProbeEnabled(_ enabled: Bool) {
+        latencyProbe.setEnabled(enabled)
     }
 
     public func start() {
@@ -278,6 +287,7 @@ public final class NetworkCollector: MetricSource {
         // to URLSession's queues, so nothing behind us on the sampling queue waits for
         // a server on the far side of the internet.
         publicIPLookup.refreshIfDue()
+        latencyProbe.refreshIfDue()
 
         let primaryName = primaryInterfaceName()
         let primary = primaryName.flatMap { name in stats.first { $0.name == name } }
@@ -300,6 +310,7 @@ public final class NetworkCollector: MetricSource {
             // contacting a third party is not something a sampling tick should do. This
             // is the cached answer of the opt-in fetcher above, read under its lock.
             publicIP: publicIPLookup.currentState(),
+            latency: latencyProbe.currentState(),
             isVPNActive: vpnActive))
     }
 

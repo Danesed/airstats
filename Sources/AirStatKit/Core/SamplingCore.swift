@@ -261,6 +261,15 @@ public final class SamplingCore: @unchecked Sendable {
         }
     }
 
+    /// The latency probe exists for the panel's network module, so it follows panel
+    /// visibility rather than a setting: opening the panel starts it, closing it
+    /// stops the traffic entirely.
+    public func setLatencyProbeEnabled(_ enabled: Bool) {
+        queue.async { [self] in
+            networkSlot.source.setLatencyProbeEnabled(enabled)
+        }
+    }
+
     /// Called on wake from sleep: cumulative counters may have reset and every
     /// rate is meaningless until re-baselined.
     public func noteWakeFromSleep() {
