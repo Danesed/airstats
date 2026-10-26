@@ -225,8 +225,12 @@ extension PanelSummary {
                                 symbol: "arrow.down")
         case .disk:
             guard let disk = engine.disk.value, let root = disk.rootVolume else { return PanelSummary() }
+            // The caption is the value's twin in the other unit: "120 GB" and
+            // "24% free" are one answer, so it is measured from the same bytes.
+            let freeFraction = root.totalBytes > 0
+                ? Double(root.availableBytes) / Double(root.totalBytes) : 0
             return PanelSummary(value: formatter.storage(root.availableBytes),
-                                caption: "free")
+                                caption: formatter.percent(freeFraction) + " free")
         case .battery:
             guard let power = engine.power.value else { return PanelSummary() }
             guard power.hasBattery, let percentage = power.percentage else {
