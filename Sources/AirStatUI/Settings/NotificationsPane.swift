@@ -88,6 +88,8 @@ struct NotificationsPane: View {
     /// General, and without it there is no address to watch.
     @ViewBuilder
     private var publicIPRow: some View {
+        Toggle("Internet connection changes",
+               isOn: settings.binding(\.notifications.notifiesOnConnectivityChange))
         Toggle("Public IP changes",
                isOn: settings.binding(\.notifications.notifiesOnPublicIPChange))
         if isEnabled, settings.settings.notifications.notifiesOnPublicIPChange,

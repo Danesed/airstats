@@ -752,24 +752,31 @@ public struct NotificationSettings: Sendable, Codable, Equatable {
     /// differs from the last one seen. Only meaningful while
     /// `general.fetchesPublicIP` is on, since there is no address to watch otherwise.
     public var notifiesOnPublicIPChange: Bool
+    /// Alert on every change of the primary link: to no connectivity and back to
+    /// one. `connectionType` is free in the snapshot, so the watch costs a compare.
+    public var notifiesOnConnectivityChange: Bool
 
     public init(isEnabled: Bool = false, rules: [ThresholdRule] = NotificationSettings.defaultRules,
-                notifiesOnPublicIPChange: Bool = false) {
+                notifiesOnPublicIPChange: Bool = false, notifiesOnConnectivityChange: Bool = false) {
         self.isEnabled = isEnabled
         self.rules = rules
         self.notifiesOnPublicIPChange = notifiesOnPublicIPChange
+        self.notifiesOnConnectivityChange = notifiesOnConnectivityChange
     }
 
     public static var defaultRules: [ThresholdRule] {
         ThresholdMetric.allCases.map { ThresholdRule(metric: $0) }
     }
 
-    private enum CodingKeys: String, CodingKey { case isEnabled, rules, notifiesOnPublicIPChange }
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled, rules, notifiesOnPublicIPChange, notifiesOnConnectivityChange
+    }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = c.value(.isEnabled, or: false)
         notifiesOnPublicIPChange = c.value(.notifiesOnPublicIPChange, or: false)
+        notifiesOnConnectivityChange = c.value(.notifiesOnConnectivityChange, or: false)
         var decoded = c.value(.rules, or: NotificationSettings.defaultRules)
         // Add rules for any metric introduced since the file was written.
         let present = Set(decoded.map(\.metric))
@@ -1061,7 +1068,9 @@ public struct Settings: Sendable, Codable, Equatable {
         }
         if notifications.isEnabled {
             for rule in notifications.enabledRules { sources.insert(rule.metric.requiredSource) }
-            if notifications.notifiesOnPublicIPChange { sources.insert(.network) }
+            if notifications.notifiesOnPublicIPChange || notifications.notifiesOnConnectivityChange {
+                sources.insert(.network)
+            }
         }
         // System info is cheap, static, and needed for the about/uptime readouts.
         sources.insert(.system)

@@ -19,6 +19,9 @@ public final class ThresholdMonitor {
     /// Seeded silently rather than alerted on, because an address read for the first
     /// time cannot be told apart from one that changed while nobody was watching.
     private var lastSeenPublicIP: String?
+    /// Same seeding rule as the IP: the link state read on the first sample after
+    /// launch is the baseline, not an event.
+    private var lastSeenConnectivity: Bool?
 
     /// True while the observation loop and any pending authorisation request are
     /// installed.
@@ -85,6 +88,7 @@ public final class ThresholdMonitor {
         guard notifications.isEnabled else {
             evaluator.reset()
             lastSeenPublicIP = nil
+            lastSeenConnectivity = nil
             return
         }
         // Nothing is measured until there is somewhere to send the answer. Denial is
@@ -118,6 +122,22 @@ public final class ThresholdMonitor {
                 WindowLog.log("notification posted metric=publicIP value=\(current) previous=\(last)")
             }
             lastSeenPublicIP = current
+        }
+
+        // Connectivity is the other edge: the link type is already in the snapshot,
+        // so watching it costs a compare. Only the boundary matters — Wi-Fi to
+        // Ethernet is still online, and the first sample after launch is seeded.
+        if notifications.notifiesOnConnectivityChange,
+           let network = engine.snapshot.network.value {
+            let online = network.connectionType != .none
+            if let last = lastSeenConnectivity, last != online {
+                authority.post(identifier: "network.connectivity",
+                               title: online ? "Back online" : "Internet connection lost",
+                               body: online ? "\(network.connectionType.label) is connected again."
+                                            : "The primary interface is down.")
+                WindowLog.log("notification posted metric=connectivity online=\(online)")
+            }
+            lastSeenConnectivity = online
         }
     }
 
