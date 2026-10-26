@@ -76,7 +76,10 @@ extension PanelModuleView {
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 coreClusters(cpu)
                 PanelDetailGrid(entries: [
-                    PanelDetailEntry("Load", loadAverage(cpu.loadAverage)),
+                    // The 1-minute load is already in the header; the grid adds the
+                    // two slower averages instead of repeating it.
+                    PanelDetailEntry("Load 5m", formatter.fixed(cpu.loadAverage.five, decimals: 1)),
+                    PanelDetailEntry("Load 15m", formatter.fixed(cpu.loadAverage.fifteen, decimals: 1)),
                     PanelDetailEntry("Threads", formatter.count(cpu.threadCount)),
                 ])
                 history()
@@ -110,14 +113,6 @@ extension PanelModuleView {
         return zip(cpu.perCore, cpu.coreKinds).compactMap { $0.1 == kind ? $0.0 : nil }
     }
 
-    /// One decimal, not two: three two-decimal figures do not fit a half-width
-    /// column, and the second decimal of a load average carries nothing.
-    private func loadAverage(_ load: LoadAverage) -> String {
-        [load.one, load.five, load.fifteen]
-            .map { formatter.fixed($0, decimals: 1) }
-            .joined(separator: " · ")
-    }
-
     // MARK: Memory
 
     private var memoryDetail: some View {
@@ -128,8 +123,7 @@ extension PanelModuleView {
                                       title: "Memory composition",
                                       barHeight: Design.Space.s, showsLegend: false)
                 PanelSegmentLegend(segments: segments, format: .memoryBytes)
-                PanelBarRow(label: "Pressure",
-                            value: "\(memory.memoryPressure.label) · \(formatter.percent(memory.pressureFraction))",
+                PanelBarRow(label: "Pressure", value: memory.memoryPressure.label,
                             fraction: memory.pressureFraction,
                             tint: PanelModuleView.barTint)
                 PanelDetailGrid(entries: [
@@ -197,7 +191,7 @@ extension PanelModuleView {
                 VStack(alignment: .leading, spacing: Design.Space.xs) {
                     if let used = device.vramUsedBytes, let total = device.vramTotalBytes, total > 0 {
                         PanelBarRow(label: device.memoryLabel,
-                                    value: "\(formatter.memory(used)) of \(formatter.memory(total))",
+                                    value: "of \(formatter.memory(total))",
                                     fraction: Double(used) / Double(total),
                                     tint: tint)
                     }
@@ -477,14 +471,6 @@ extension PanelModuleView {
             entries.append(PanelDetailEntry("Time left", formatter.duration(toEmpty)))
         } else if power.isFullyCharged {
             entries.append(PanelDetailEntry("State", "Charged"))
-        }
-        // The pack's instantaneous power. On battery it IS the system draw (the pack
-        // is the only supply); on AC it is the charge rate. systemWatts deliberately
-        // stays nil — the IOKit SystemLoad key was measured disagreeing with the
-        // battery's own Voltage × Amperage by up to 45%.
-        if let watts = power.batteryWatts {
-            entries.append(PanelDetailEntry(power.isCharging ? "Charging at" : "Draw",
-                                            formatter.watts(abs(watts))))
         }
         if let health = power.healthPercent {
             entries.append(PanelDetailEntry("Health", formatter.percentValue(health)))

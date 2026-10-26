@@ -12,7 +12,6 @@ struct PanelSummary {
     enum Emphasis { case measurement, state }
 
     var value: String?
-    var caption: String?
     /// Replaces the module's own glyph. A full battery icon on a Mac that has no
     /// battery states something untrue before the reader gets to the words.
     var icon: String?
@@ -22,6 +21,12 @@ struct PanelSummary {
     /// else one number is the answer.
     var leadValue: String?
     var leadSymbol: String?
+    /// A second reading that follows `value`, at the same headline size: "76%"
+    /// says what the pack holds, "11.7 W" what it is doing right now. The
+    /// collapsed row must carry the whole story — a number the reader has to
+    /// expand to understand is a headline that failed.
+    var trailValue: String?
+    var trailSymbol: String?
     var emphasis: Emphasis = .measurement
     /// Text the headline slot is sized for before it is on screen, drawn hidden at
     /// the size the real reading will use. Only a module whose headline swaps a
@@ -39,9 +44,7 @@ struct PanelModuleView: View {
     let engine: MetricsEngine
     let settings: SettingsStore
     var layout: PanelLayoutState?
-    /// Width of the qualifier column beside the headline value, shared by every row so
-    /// the numbers keep one right edge. See `PanelSummary.captionColumnWidth(for:)`.
-    var captionColumnWidth: CGFloat
+
 
     @State private var isHovering = false
     /// Which window the module's history chart shows, once the user has picked one.
@@ -137,7 +140,8 @@ struct PanelModuleView: View {
             }
         }
         .accessibilityLabel(module.label)
-        .accessibilityValue([summary.leadValue, summary.value].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue([summary.leadValue, summary.value, summary.trailValue]
+            .compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint(isExpanded ? "Collapse" : "Expand")
     }
 
@@ -171,23 +175,10 @@ struct PanelModuleView: View {
                             headlineReading(symbol: summary.leadSymbol, value: lead)
                         }
                         headlineReading(symbol: summary.symbol, value: value)
+                        if let trail = summary.trailValue {
+                            headlineReading(symbol: summary.trailSymbol, value: trail)
+                        }
                     }
-                }
-                // The qualifier sits in a shared column so it cannot push the number.
-                //
-                // Inline, a caption shifted its value left by its own width, so across the
-                // collapsed list the numbers ended at x = 254, 282, 285, 300, 323, 324 —
-                // a 70pt ragged spread that made the column impossible to scan even though
-                // the right edge looked tidy. Every row takes the slot whether or not it
-                // has a caption, which puts every number's right edge on the same line.
-                // When no row has one there is no column at all.
-                if captionColumnWidth > 0 {
-                    Text(summary.caption ?? "")
-                        .font(Design.Text.caption)
-                        .foregroundStyle(Design.Palette.tertiaryText)
-                        .lineLimit(1)
-                        .frame(width: captionColumnWidth, alignment: .leading)
-                        .accessibilityHidden(summary.caption == nil)
                 }
             }
         }
@@ -242,51 +233,47 @@ extension PanelSummary {
             // The percentage alone cannot say whether work is queueing: 34% with a
             // load of 12 is a very different machine from 34% with a load of 1.
             return PanelSummary(value: formatter.percent(cpu.total.busy),
-                                caption: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
+                                trailValue: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
         case .memory:
             guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
             return PanelSummary(value: formatter.percent(memory.pressureFraction),
-                                caption: formatter.memory(memory.usedBytes))
+                                trailValue: formatter.memory(memory.usedBytes))
         case .gpu:
             guard let gpu = engine.gpu.value else { return warmup(for: engine.gpu) }
             guard let device = gpu.primary else { return PanelSummary() }
-            // The bare figure, not "Memory 5.4 GB": a caption labels what is on
-            // its row, and a caption that long widens the shared caption column
-            // enough to squeeze the module labels into ellipses.
+            // The bare figure, not "Memory 5.4 GB": a trailing word labels what is
+            // on its row, and one that long would push the headline off the row.
             let vram = device.vramUsedBytes.map { formatter.memory($0) }
             // The handover swaps a state-size name for a headline-size number, so
             // the slot is sized for both from the start and only the text moves.
             guard let utilization = device.utilization else {
-                return PanelSummary(value: device.name, caption: vram,
+                return PanelSummary(value: device.name, trailValue: vram,
                                     emphasis: .state,
                                     reservedHeadlineText: formatter.percent(1.0),
                                     reservedValueText: device.name)
             }
-            // Device identity belongs in the expanded detail: it is the only
-            // caption long enough to break the column.
-            return PanelSummary(value: formatter.percent(utilization), caption: vram,
+            return PanelSummary(value: formatter.percent(utilization), trailValue: vram,
                                 reservedHeadlineText: formatter.percent(1.0),
                                 reservedValueText: device.name)
         case .network:
             guard let network = engine.network.value else { return warmup(for: engine.network) }
-            // The paired headline is already the widest in the panel; even a short
-            // SSID here widens the shared caption column enough to squeeze this
-            // row's own label into an ellipsis. The connection kind only reports
+            // The paired headline is already the widest in the panel — there is
+            // no room for a third reading here. The connection kind only reports
             // when there is no Wi-Fi row below to carry the network's name.
             return PanelSummary(value: formatter.networkRate(network.downloadBytesPerSecond),
-                                caption: network.wifi == nil ? network.connectionType.label : nil,
                                 symbol: "arrow.down.left",
                                 leadValue: formatter.networkRate(network.uploadBytesPerSecond),
-                                leadSymbol: "arrow.up.right")
+                                leadSymbol: "arrow.up.right",
+                                trailValue: network.wifi == nil ? network.connectionType.label : nil)
         case .disk:
             guard let disk = engine.disk.value else { return warmup(for: engine.disk) }
             guard let root = disk.rootVolume else { return PanelSummary() }
-            // The caption is the value's twin in the other unit: "120 GB" and
-            // "24% free" are one answer, so it is measured from the same bytes.
+            // The trailing figure is the value's twin in the other unit:
+            // "120 GB" and "24% free" are one answer, measured from the same bytes.
             let freeFraction = root.totalBytes > 0
                 ? Double(root.availableBytes) / Double(root.totalBytes) : 0
             return PanelSummary(value: formatter.storage(root.availableBytes),
-                                caption: formatter.percent(freeFraction) + " free")
+                                trailValue: formatter.percent(freeFraction) + " free")
         case .battery:
             guard let power = engine.power.value else { return warmup(for: engine.power) }
             guard power.hasBattery, let percentage = power.percentage else {
@@ -294,32 +281,31 @@ extension PanelSummary {
                                     icon: "powerplug",
                                     emphasis: .state)
             }
-            // The caption is the pack's instantaneous power: on battery it is the
-            // system draw, on AC it is the charge rate — which also carries the
-            // "is it charging" answer the old "charging" caption held, in a number.
+            // The trailing figure is the pack's instantaneous power: on battery it
+            // is the system draw, on AC the charge rate — so "is it charging" is
+            // answered by a number, and the plug glyph says it too.
             return PanelSummary(value: formatter.percentValue(percentage),
-                                caption: power.batteryWatts.map { formatter.watts(abs($0)) },
-                                icon: power.isCharging || power.isPluggedIn ? "powerplug" : nil)
+                                icon: power.isCharging || power.isPluggedIn ? "powerplug" : nil,
+                                trailValue: power.batteryWatts.map { formatter.watts(abs($0)) })
         case .thermal:
             guard let thermal = engine.thermal.value else { return warmup(for: engine.thermal) }
-            // The caption is the fastest fan: a temperature is only half the story,
-            // and "52°C" reads very differently depending on whether the fans have
-            // answered. "fan 1820" rather than "1,820 RPM" — the unit suffix would
-            // widen the shared caption column enough to squeeze module labels.
+            // The trailing figure is the fastest fan: a temperature is only half
+            // the story, and "52°C" reads very differently depending on whether the
+            // fans have answered. Macs without fans simply have no trail.
             let fan = thermal.fans.max { $0.currentRPM < $1.currentRPM }
-                .map { "fan \(Int($0.currentRPM.rounded()))" }
+                .map { formatter.rpm($0.currentRPM) }
             guard let celsius = thermal.cpuCelsius else {
-                return PanelSummary(value: thermal.pressure.label, caption: fan,
+                return PanelSummary(value: thermal.pressure.label, trailValue: fan,
                                     emphasis: .state)
             }
-            return PanelSummary(value: formatter.temperature(celsius), caption: fan)
+            return PanelSummary(value: formatter.temperature(celsius), trailValue: fan)
         case .processes:
             guard let processes = engine.processes.value else { return warmup(for: engine.processes) }
             return PanelSummary(value: formatter.count(processes.totalProcessCount),
-                                caption: "running")
+                                trailValue: "running")
         case .system:
             guard let system = engine.system.value else { return warmup(for: engine.system) }
-            return PanelSummary(value: formatter.uptime(system.uptime), caption: "uptime")
+            return PanelSummary(value: formatter.uptime(system.uptime), trailValue: "uptime")
         }
     }
 
@@ -333,18 +319,4 @@ extension PanelSummary {
             : PanelSummary()
     }
 
-    /// The width the qualifier column needs to hold the widest caption in `summaries`.
-    ///
-    /// Measured from what is on screen rather than reserved for the longest caption the
-    /// panel can ever show: sized for a state that is not always present, the column
-    /// stood mostly empty and the whole right edge read as a gap. Every row still
-    /// takes the same width, so the numbers keep their shared right edge; that edge
-    /// just sits where the captions actually end.
-    static func captionColumnWidth(for summaries: [PanelSummary]) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: Design.Text.captionSize)
-        let widest = summaries.compactMap(\.caption).map {
-            ($0 as NSString).size(withAttributes: [.font: font]).width
-        }.max() ?? 0
-        return ceil(widest)
-    }
 }

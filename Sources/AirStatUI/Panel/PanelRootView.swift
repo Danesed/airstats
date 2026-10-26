@@ -58,11 +58,10 @@ public struct PanelRootView: View {
             }
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    let captionColumnWidth = captionColumnWidth
                     ForEach(Array(modules.enumerated()), id: \.element) { index, module in
                         if index > 0 { PanelSeparator(isVisible: separatorNeeded(before: index)) }
                         PanelModuleView(module: module, engine: engine, settings: settings,
-                                        layout: layout, captionColumnWidth: captionColumnWidth)
+                                        layout: layout)
                     }
                 }
                 .padding(.vertical, Design.Space.xs)
@@ -109,14 +108,6 @@ public struct PanelRootView: View {
     @Environment(\.panelActions) private var actions
 
     private var modules: [PanelModule] { settings.settings.panel.visibleModules }
-
-    /// One width for every row's qualifier column, from the captions on screen now.
-    private var captionColumnWidth: CGFloat {
-        let formatter = MetricFormatter(settings: settings.settings.general)
-        return PanelSummary.captionColumnWidth(for: modules.map {
-            PanelSummary.make(for: $0, engine: engine, formatter: formatter)
-        })
-    }
 
     /// A rule earns its place only where it delimits a block of detail.
     ///
