@@ -329,6 +329,7 @@ public enum SnapshotFixtures {
         info.osName = "macOS"
         info.osVersion = "26.5.2"
         info.osBuild = "25F84"
+        info.displaySummary = "3024 × 1964 · 120 Hz"
         let uptimeSeconds: TimeInterval = 372_060   // 4d 7h 21m
         info.uptime = uptimeSeconds
         info.bootTime = referenceDate.addingTimeInterval(-uptimeSeconds)

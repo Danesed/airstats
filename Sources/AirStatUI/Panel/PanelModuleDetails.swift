@@ -625,6 +625,11 @@ extension PanelModuleView {
                     PanelDetailEntry("Chip", system.chipName),
                     PanelDetailEntry(system.osName, system.osVersion),
                 ])
+                // Full width like the model row: "3024 × 1964 · 120 Hz · 2 displays"
+                // does not fit half a grid cell.
+                if let display = system.displaySummary {
+                    ReadoutRow("Display", display)
+                }
             }
         }
     }

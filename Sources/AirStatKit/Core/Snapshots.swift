@@ -695,13 +695,18 @@ public struct SystemInfoSnapshot: Sendable, Equatable {
     public var totalMemoryBytes: UInt64
     public var isAppleSilicon: Bool
     public var gpuCoreCount: Int?
+    /// One line describing the main display ("3024 × 1964 · 120 Hz"), with the
+    /// display count appended when externals are attached. Refreshed per sample —
+    /// the only part of this snapshot that can actually change.
+    public var displaySummary: String?
 
     public init(hostName: String = "", computerName: String = "", modelIdentifier: String = "",
                 modelName: String = "", chipName: String = "", osName: String = "macOS",
                 osVersion: String = "", osBuild: String = "", uptime: TimeInterval = 0,
                 bootTime: Date = Date(), physicalCores: Int = 0, logicalCores: Int = 0,
                 performanceCores: Int = 0, efficiencyCores: Int = 0, totalMemoryBytes: UInt64 = 0,
-                isAppleSilicon: Bool = false, gpuCoreCount: Int? = nil) {
+                isAppleSilicon: Bool = false, gpuCoreCount: Int? = nil,
+                displaySummary: String? = nil) {
         self.hostName = hostName
         self.computerName = computerName
         self.modelIdentifier = modelIdentifier
@@ -719,6 +724,7 @@ public struct SystemInfoSnapshot: Sendable, Equatable {
         self.totalMemoryBytes = totalMemoryBytes
         self.isAppleSilicon = isAppleSilicon
         self.gpuCoreCount = gpuCoreCount
+        self.displaySummary = displaySummary
     }
 }
 

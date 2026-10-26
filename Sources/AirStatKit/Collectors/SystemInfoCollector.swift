@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import IOKit
 import SystemConfiguration
@@ -46,7 +47,27 @@ public final class SystemInfoCollector: MetricSource {
         // sleep it under-reports by hours. uptime(1) uses the boot-time difference and
         // that is the number users compare against. Verified against uptime(1).
         snapshot.uptime = max(0, Date().timeIntervalSince(snapshot.bootTime))
+        // An external display can arrive or leave at any moment, so unlike the
+        // rest of the identity this one is re-read on every (30s) sample.
+        snapshot.displaySummary = Self.displaySummary()
         return .value(snapshot)
+    }
+
+    /// "3024 × 1964 · 120 Hz", plus the display count when externals are attached.
+    /// Refresh rate stays off when the mode does not report one (virtual displays
+    /// and some projectors return 0 rather than admit ignorance).
+    private static func displaySummary() -> String? {
+        var ids = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetActiveDisplayList(UInt32(ids.count), &ids, &count) == .success,
+              count > 0,
+              let mode = CGDisplayCopyDisplayMode(CGMainDisplayID())
+        else { return nil }
+        var text = "\(mode.pixelWidth) × \(mode.pixelHeight)"
+        let hz = Int(mode.refreshRate.rounded())
+        if hz > 0 { text += " · \(hz) Hz" }
+        if count > 1 { text += " · \(count) displays" }
+        return text
     }
 
     // MARK: Static resolution
