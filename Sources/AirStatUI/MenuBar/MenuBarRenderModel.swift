@@ -381,6 +381,13 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                     unavailable = false
                     accessibilityValue = "Battery time \(valueText)"
                 }
+                // Same state as the battery readout, so the icon can say charging
+                // and level too. Nothing else on this metric consumes the fields.
+                if let pct = power.percentage {
+                    let charge = min(max(pct / 100, 0), 1)
+                    battery = BatteryState(charge: charge, isCharging: power.isCharging,
+                                           isLow: false, valueText: "")
+                }
             }
 
         case .systemPower:
@@ -448,7 +455,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             primary: primary,
             secondary: secondary,
             isUnavailable: unavailable,
-            symbolName: symbolName(for: config.metric),
+            symbolName: symbolName(for: config.metric, battery: battery),
             accessibilityLabel: accessibility,
             batteryCharge: battery?.charge,
             isBatteryCharging: battery?.isCharging ?? false,
@@ -588,7 +595,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         formatter.diskRate(999 * pow(formatter.byteStyle.base, 2), compact: true)
     }
 
-    private static func symbolName(for metric: MenuBarMetric) -> String? {
+    private static func symbolName(for metric: MenuBarMetric,
+                                   battery: BatteryState? = nil) -> String? {
         switch metric {
         case .cpuUsage, .cpuFrequency: return "cpu"
         case .cpuTemperature: return "thermometer.medium"
@@ -596,7 +604,19 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .gpuUsage: return "cube.transparent"
         case .networkThroughput, .networkUpload, .networkDownload: return "network"
         case .diskActivity, .diskFree, .diskUsage: return "internaldrive"
-        case .battery, .batteryTime: return "battery.100"
+        case .battery, .batteryTime:
+            // The icon styles borrow the system's battery glyphs, so they can say
+            // the same two things its indicator does: how full, and whether power
+            // is going in. The level follows the quarters macOS ships glyphs for.
+            guard let battery else { return "battery.100percent" }
+            if battery.isCharging { return "battery.100percent.bolt" }
+            switch battery.charge {
+            case ..<0.13: return "battery.0percent"
+            case ..<0.38: return "battery.25percent"
+            case ..<0.63: return "battery.50percent"
+            case ..<0.88: return "battery.75percent"
+            default: return "battery.100percent"
+            }
         case .systemPower: return "bolt"
         case .fanSpeed: return "fan"
         case .uptime: return "clock"

@@ -203,6 +203,55 @@ struct BatteryRenderModelTests {
     }
 }
 
+@Suite("The icon styles' battery glyph says level and charging")
+struct BatteryIconTests {
+
+    private func icon(percent: Double, charging: Bool,
+                      metric: MenuBarMetric = .battery) -> String? {
+        var snapshot = SnapshotFixtures.nominal
+        snapshot.power = .value(SnapshotFixtures.power(percent: percent, charging: charging))
+        let config = MenuBarItemConfig(metric: metric, style: .iconAndText,
+                                       showsCaption: false)
+        let model = MenuBarRenderModel(
+            snapshot: snapshot, history: SnapshotFixtures.history(),
+            settings: Settings(menuBar: MenuBarSettings(items: [config])),
+            isStale: false)
+        return model.items[0].symbolName
+    }
+
+    @Test("charging borrows the system's bolt whatever the level")
+    func chargingShowsTheBolt() {
+        #expect(icon(percent: 34, charging: true) == "battery.100percent.bolt")
+        #expect(icon(percent: 90, charging: true) == "battery.100percent.bolt")
+    }
+
+    @Test("the level follows the quarters macOS ships glyphs for")
+    func levelFollowsQuarters() {
+        #expect(icon(percent: 5, charging: false) == "battery.0percent")
+        #expect(icon(percent: 30, charging: false) == "battery.25percent")
+        #expect(icon(percent: 55, charging: false) == "battery.50percent")
+        #expect(icon(percent: 80, charging: false) == "battery.75percent")
+        #expect(icon(percent: 96, charging: false) == "battery.100percent")
+    }
+
+    @Test("battery Time Remaining shows the same live icon")
+    func timeRemainingSharesTheIcon() {
+        #expect(icon(percent: 40, charging: true, metric: .batteryTime)
+                == "battery.100percent.bolt")
+    }
+
+    @Test("with no battery the icon is a plain full battery, not a phantom bolt")
+    func noBatteryKeepsTheStaticIcon() {
+        var settings = Settings()
+        settings.menuBar.items = [MenuBarItemConfig(metric: .battery,
+                                                  style: .iconAndText)]
+        let model = MenuBarRenderModel(snapshot: SnapshotFixtures.degraded,
+                                       history: SnapshotFixtures.history(),
+                                       settings: settings, isStale: false)
+        #expect(model.items[0].symbolName == "battery.100percent")
+    }
+}
+
 @MainActor
 @Suite("The indicator holds its width and draws at both scales")
 struct BatteryDrawingTests {
