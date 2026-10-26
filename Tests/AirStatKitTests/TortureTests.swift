@@ -168,7 +168,7 @@ struct WindowTortureTests {
                            history: MetricHistory(capacity: 60, sampleInterval: 1))
         let controller = PanelController(engine: engine, settings: s)
         controller.show(anchoredTo: nil, on: NSScreen.main)
-        let window = try #require(NSApp.windows.first { $0.isVisible })
+        let window = try #require(controller.window)
         let before = window.frame
 
         controller.toggleModule(.memory)
@@ -179,6 +179,63 @@ struct WindowTortureTests {
         #expect(abs(window.frame.maxY - before.maxY) < 1,
                 "panel top moved from \(before.maxY) to \(window.frame.maxY)")
         controller.hide()
+    }
+
+    /// The panel scrolls only while its content outgrows the room below the status
+    /// item. Collapsing the module that pushed it over the cap leaves the list
+    /// fitting again, and any offset carried over from the scrollable state is out
+    /// of range — it reads as the top of the panel being clipped.
+    @Test("collapsing a scrollable panel re-pins its content to the top")
+    func collapseResetsScrollOffset() async throws {
+        let s = store()
+        let engine = MetricsEngine(settingsStore: s)
+        engine.loadFixture(snapshot: SnapshotFixtures.nominal,
+                           history: MetricHistory(capacity: 60, sampleInterval: 1))
+        let controller = PanelController(engine: engine, settings: s)
+        let screen = try #require(NSScreen.main)
+
+        controller.show(anchoredTo: nil, on: screen)
+        let collapsed = try #require(controller.window?.frame.height)
+        let scrollView = try #require(scrollView(in: controller.window?.contentView))
+        // However the scroll document is oriented, this is the y its top lives at.
+        let topY = scrollView.documentVisibleRect.origin.y
+        controller.hide()
+        await Task.yield()
+
+        // An anchor low enough to leave the collapsed list fitting while an open
+        // module outgrows the window.
+        let available = collapsed + 40
+        let anchorMinY = screen.visibleFrame.minY + Design.Space.m + Design.Space.s + available
+        controller.show(anchoredTo: NSRect(x: screen.visibleFrame.midX, y: anchorMinY,
+                                           width: 30, height: 22), on: screen)
+        let window = try #require(controller.window)
+
+        controller.toggleModule(.cpu)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(window.frame.height < collapsed + 500,
+                "panel was not capped: \(window.frame.height)")
+        let document = try #require(scrollView.documentView)
+        #expect(document.frame.height > scrollView.contentView.bounds.height,
+                "panel did not become scrollable")
+        scrollView.contentView.bounds.origin = NSPoint(x: 0, y: topY + 40)
+
+        controller.toggleModule(.cpu)
+        try await Task.sleep(for: .milliseconds(500))
+
+        #expect(abs(window.frame.height - collapsed) < 2,
+                "panel did not return to its collapsed height: \(window.frame.height) vs \(collapsed)")
+        #expect(abs(scrollView.documentVisibleRect.origin.y - topY) < 1,
+                "scroll offset \(scrollView.documentVisibleRect.origin.y) left the top clipped")
+        controller.hide()
+    }
+
+    private func scrollView(in view: NSView?) -> NSScrollView? {
+        guard let view else { return nil }
+        if let scroll = view as? NSScrollView { return scroll }
+        for subview in view.subviews {
+            if let found = scrollView(in: subview) { return found }
+        }
+        return nil
     }
 
     /// Anchors off the bottom, off the side, and on no screen at all. The placement
@@ -204,7 +261,7 @@ struct WindowTortureTests {
         ]
         for anchor in anchors {
             controller.show(anchoredTo: anchor, on: nil)
-            let frame = try #require(NSApp.windows.first { $0.isVisible }?.frame)
+            let frame = try #require(controller.window?.frame)
             #expect(frame.width > 0 && frame.height > 0, "degenerate frame for \(String(describing: anchor))")
             #expect(NSScreen.screens.contains { $0.frame.intersects(frame) },
                     "panel landed on no screen for \(String(describing: anchor))")

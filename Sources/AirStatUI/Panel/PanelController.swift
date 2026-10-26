@@ -19,11 +19,15 @@ public final class PanelController: NSObject, NSWindowDelegate {
     private let settings: SettingsStore
     /// Absent in the offscreen renderer. The panel's update row is drawn from it.
     private let updates: SoftwareUpdater?
-    private var window: PanelWindow?
+    /// Internal rather than private so tests can assert on the window this
+    /// controller actually owns; `NSApp.windows` can briefly hold a second panel
+    /// window while another show/hide cycle fades out.
+    internal private(set) var window: PanelWindow?
     private var layout: PanelLayoutState?
     private var isDisclosureTransitionActive = false
     /// Animations still running in the current disclosure: SwiftUI's reveal and
-    /// AppKit's window resize. The transition ends when the last of them does.
+    /// AppKit's window resize. Both finishing only means the transaction *may* be
+    /// done — `finishDisclosure` still waits for the frame to arrive.
     private var disclosureAnimationsPending = 0
 
     /// Every `NSEvent` monitor and notification observer this controller owns, in one
@@ -115,6 +119,16 @@ public final class PanelController: NSObject, NSWindowDelegate {
         presentation &+= 1
         let generation = presentation
         isVisible = false
+        // A disclosure interrupted by a dismiss would otherwise hold its transition
+        // flag until the deadline fired; nothing is mid-flight once the panel is
+        // gone, and the next open must not find every click ignored.
+        isDisclosureTransitionActive = false
+        disclosureAnimationsPending = 0
+        disclosureDestination = nil
+        disclosureDeadline = nil
+        layout?.isDisclosureTransitionActive = false
+        layout?.collapsedModulesOverride = nil
+        layout?.disclosureOrigin = nil
         NSAnimationContext.runAnimationGroup { context in
             context.duration = motionDuration * 0.7
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -236,6 +250,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         let fitting = window.contentView?.fittingSize
             ?? NSSize(width: PanelSettings.width, height: window.frame.height)
         let destination = targetFrame(for: fitting, anchoredTo: lastAnchor, on: lastScreen)
+        WindowLog.log("disclosure \(module.rawValue) fitting=\(fitting) dest=\(destination) win=\(window.frame)")
 
         let duration = disclosureDuration
         // Reduce Motion: nothing to animate, so the ordering is the whole job. The
@@ -282,12 +297,18 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // up one intrinsic-size change at a time: seven visible steps after every
         // open. Waiting for both, the window sits at its destination while the reveal
         // catches up, and the one `position` at the end has nothing left to move.
+        disclosureGeneration &+= 1
+        let generation = disclosureGeneration
+        disclosureDestination = destination
+        disclosureDeadline = Date().addingTimeInterval(duration + 1)
         disclosureAnimationsPending = 2
-        let animationDidEnd = { [weak self, weak window, weak layout] in
+        let animationDidEnd = { [weak self] in
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, self.disclosureGeneration == generation,
+                      self.disclosureAnimationsPending > 0 else { return }
                 self.disclosureAnimationsPending -= 1
-                guard self.disclosureAnimationsPending == 0, let window, let layout else { return }
+                guard self.disclosureAnimationsPending == 0,
+                      let window = self.window, let layout = self.layout else { return }
                 self.finishDisclosure(window: window, layout: layout)
             }
         }
@@ -310,6 +331,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(Int(duration * 1000) + 250))
             guard let self, self.isDisclosureTransitionActive,
+                  self.disclosureGeneration == generation,
                   self.disclosureAnimationsPending > 0,
                   let window = self.window, let layout = self.layout else { return }
             self.disclosureAnimationsPending = 0
@@ -317,12 +339,43 @@ public final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// The frame the window is animating to, and the generation identifying this
+    /// transaction's own completion callbacks. A stale completion from a previous
+    /// transition — AppKit's group handler has been seen to arrive late enough to
+    /// decrement a counter it never owned — must not count toward this one.
+    private var disclosureDestination: NSRect?
+    private var disclosureDeadline: Date?
+    private var disclosureGeneration = 0
+
     private var disclosureDuration: TimeInterval {
         Design.Motion.respectingAccessibility(Design.Motion.disclosure) == nil
             ? 0 : Design.Motion.disclosureDuration
     }
 
     private func finishDisclosure(window: NSWindow, layout: PanelLayoutState) {
+        // A completion can precede the window's own arrival: SwiftUI's logically
+        // complete fires when its transaction resolves, and a stale AppKit group
+        // handler can decrement a counter it never owned. Finishing early has been
+        // seen to measure a fittingSize of zero — the window teleported to a 0×0
+        // frame — and to drop the resize guard while the frame was still animating,
+        // so every animated frame re-entered position() and chased the animated
+        // height back to the destination one notification at a time. The
+        // transaction is over when the frame has arrived; the deadline covers the
+        // arrival that never comes.
+        let arrived = disclosureDestination.map { isNear(window.frame, $0) } ?? true
+        let overdue = disclosureDeadline.map { Date() >= $0 } ?? false
+        guard arrived || overdue else {
+            Task { @MainActor [weak self, weak window, weak layout] in
+                try? await Task.sleep(for: .milliseconds(80))
+                guard let self, let window, let layout,
+                      self.isDisclosureTransitionActive else { return }
+                self.finishDisclosure(window: window, layout: layout)
+            }
+            return
+        }
+        disclosureDestination = nil
+        disclosureDeadline = nil
+
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
@@ -334,6 +387,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // Resolve any sub-point discrepancy between the measured destination and the
         // final intrinsic size without producing a second visible move.
         position(window, anchoredTo: lastAnchor, on: lastScreen)
+        WindowLog.log("disclosure finished win=\(window.frame)")
     }
 
     /// Anchor under the status item, nudged so the panel never hangs off the screen,
@@ -346,9 +400,13 @@ public final class PanelController: NSObject, NSWindowDelegate {
         window.layoutIfNeeded()
         let fitting = window.contentView?.fittingSize
             ?? NSSize(width: PanelSettings.width, height: 400)
+        // A layout measured mid-transaction can report an empty intrinsic size;
+        // applied, it once teleported the panel to a zero-sized frame.
+        guard fitting.width > 0, fitting.height > 0 else { return }
 
         let frame = targetFrame(for: fitting, anchoredTo: anchor, on: screen)
         guard frame != window.frame else { return }
+        WindowLog.log("position \(window.frame) -> \(frame) fitting=\(fitting)")
         window.setFrame(frame, display: true)
     }
 
@@ -416,6 +474,13 @@ public final class PanelController: NSObject, NSWindowDelegate {
         NSScreen.screens.first { $0.frame.intersects(rect) }
     }
 
+    /// The frame an animation was sent to counts as arrived only once it is actually
+    /// there; a point of tolerance covers AppKit's sub-point landings.
+    private func isNear(_ a: NSRect, _ b: NSRect) -> Bool {
+        abs(a.minX - b.minX) < 1 && abs(a.minY - b.minY) < 1
+            && abs(a.width - b.width) < 1 && abs(a.height - b.height) < 1
+    }
+
     private static let escapeKeyCode: UInt16 = 53
 
     /// SwiftUI can invalidate its size several times in one layout pass, so the
@@ -439,9 +504,16 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     /// SwiftUI grows the window downwards from its bottom-left corner; re-running the
     /// placement re-pins it under the status item and re-applies the height cap.
+    /// During a disclosure the notifications are the frames of the animation itself —
+    /// ignored except as the arrival signal that ends the transaction.
     public func windowDidResize(_ notification: Notification) {
-        guard let window, isVisible, !isPositioning,
-              !isDisclosureTransitionActive else { return }
+        guard let window, isVisible, !isPositioning else { return }
+        if isDisclosureTransitionActive {
+            if let layout {
+                finishDisclosure(window: window, layout: layout)
+            }
+            return
+        }
         position(window, anchoredTo: lastAnchor, on: lastScreen)
     }
 

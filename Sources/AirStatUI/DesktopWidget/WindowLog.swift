@@ -13,8 +13,20 @@ import Foundation
 enum WindowLog {
     static let isEnabled = ProcessInfo.processInfo.environment["AIRSTAT_WINDOW_LOG"] == "1"
 
+    /// Mirror of the trace when the app was launched through `open`/Finder, where
+    /// stderr has no reader. Appended, never truncated, and only ever in /tmp.
+    private static let mirrorURL = URL(fileURLWithPath: "/tmp/airstat-window.log")
+
     static func log(_ message: @autoclosure () -> String) {
         guard isEnabled else { return }
-        FileHandle.standardError.write(Data("[airstat.window] \(message())\n".utf8))
+        let line = "[airstat.window] \(message())\n"
+        FileHandle.standardError.write(Data(line.utf8))
+        if let handle = try? FileHandle(forWritingTo: mirrorURL) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            try? handle.close()
+        } else {
+            try? Data(line.utf8).write(to: mirrorURL)
+        }
     }
 }
