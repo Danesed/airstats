@@ -256,6 +256,14 @@ extension PanelModuleView {
                         ReadoutRow("Factory MAC", factory)
                     }
                 }
+                if engine.networkUsage.today.combined() > 0 {
+                    ReadoutRow("Today", usageText(engine.networkUsage.today))
+                }
+                if let name = NetworkUsageLedger.networkName(of: network),
+                   let totals = engine.networkUsage.networks[name],
+                   totals.combined() > 0 {
+                    ReadoutRow("On \(name)", usageText(totals))
+                }
                 if let wifi = network.wifi, let quality = wifi.signalQuality {
                     // The network's name labels its own signal bar; a row that said
                     // "Signal" and a row that said "Network" would be two lines
@@ -282,6 +290,11 @@ extension PanelModuleView {
         case .failure(.pending): return "Looking up…"
         case .failure: return MetricFormatter.unavailable
         }
+    }
+
+    /// "↓ 1.2 GB · ↑ 340 MB": both directions of a usage total on one row.
+    private func usageText(_ totals: NetworkUsageLedger.Totals) -> String {
+        "↓ \(formatter.storage(totals.download)) · ↑ \(formatter.storage(totals.upload))"
     }
 
     /// The latency row, or nil while the panel is closed — the probe is off then,

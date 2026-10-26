@@ -27,6 +27,10 @@ public final class MetricsEngine {
         capacity: MinuteHistory.monthCapacity,
         bucketDuration: MinuteHistory.monthBucketDuration)
 
+    /// Bytes moved today and per network, persisted beside the history files.
+    /// Counters are since-boot so a sampling gap loses nothing; see the ledger.
+    public private(set) var networkUsage = NetworkUsageLedger()
+
     public private(set) var activity: SamplingActivity = .menuBar
 
     /// Wall-clock time of the last snapshot, for the "updated Xs ago" affordance.
@@ -48,6 +52,7 @@ public final class MetricsEngine {
     private let settingsStore: SettingsStore
     private let dayHistoryFile: MinuteHistoryFile
     private let monthHistoryFile: MinuteHistoryFile
+    private let usageFile: NetworkUsageFile
     /// The newest bucket the day was last written at, so the hourly save is a
     /// subtraction per sample and not a timer.
     private var dayHistorySavedMinute: Int?
@@ -82,6 +87,7 @@ public final class MetricsEngine {
         let directory = settingsStore.settingsFileURL.deletingLastPathComponent()
         self.dayHistoryFile = MinuteHistoryFile(directory: directory)
         self.monthHistoryFile = MinuteHistoryFile(directory: directory, name: "history-30d.bin")
+        self.usageFile = NetworkUsageFile(directory: directory)
     }
 
     // MARK: Lifecycle
@@ -99,6 +105,7 @@ public final class MetricsEngine {
                                              bucketDuration: monthHistory.bucketDuration) {
             monthHistory = saved
         }
+        networkUsage = usageFile.load()
         let core = SamplingCore { [weak self] snapshot in
             self?.ingest(snapshot)
         }
@@ -121,6 +128,7 @@ public final class MetricsEngine {
         // write would not get to finish.
         dayHistoryFile.save(dayHistory)
         monthHistoryFile.save(monthHistory)
+        usageFile.save(networkUsage)
         dayHistorySavedMinute = dayHistory.newestBucket
         observationTask?.cancel()
         observationTask = nil
@@ -380,6 +388,9 @@ public final class MetricsEngine {
         let month = monthHistory
         let monthFile = monthHistoryFile
         Task.detached(priority: .utility) { monthFile.save(month) }
+        let usage = networkUsage
+        let usageFile = usageFile
+        Task.detached(priority: .utility) { usageFile.save(usage) }
     }
 
     private func record(_ s: SystemSnapshot) {
@@ -411,6 +422,7 @@ public final class MetricsEngine {
         if let net = s.network.value {
             fold(.networkUpload, net.uploadBytesPerSecond)
             fold(.networkDownload, net.downloadBytesPerSecond)
+            networkUsage.observe(net, at: s.capturedAt)
         }
         if let disk = s.disk.value {
             fold(.diskRead, disk.readBytesPerSecond)
