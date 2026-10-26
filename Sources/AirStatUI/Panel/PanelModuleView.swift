@@ -23,6 +23,11 @@ struct PanelSummary {
     var leadValue: String?
     var leadSymbol: String?
     var emphasis: Emphasis = .measurement
+    /// The narrowest slot the headline is promised, reserved ahead of the content
+    /// that fills it. Only a module whose headline swaps a state for a measurement
+    /// mid-session asks for one: without it the "Apple M4 Pro" → "84%" handover
+    /// moves the whole row because the two readings draw at different sizes.
+    var reservedWidth: CGFloat?
 }
 
 /// One module of the panel: a header that carries the headline value, and detail
@@ -155,6 +160,9 @@ struct PanelModuleView: View {
                     }
                     headlineReading(symbol: summary.symbol, value: value)
                 }
+                // A reserved slot holds the right edge where the measurement lands;
+                // the state that stands in until then stays out of the spacer.
+                .frame(minWidth: summary.reservedWidth ?? 0, alignment: .trailing)
                 // The qualifier sits in a shared column so it cannot push the number.
                 //
                 // Inline, a caption shifted its value left by its own width, so across the
@@ -232,12 +240,18 @@ extension PanelSummary {
             // its row, and a caption that long widens the shared caption column
             // enough to squeeze the module labels into ellipses.
             let vram = device.vramUsedBytes.map { formatter.memory($0) }
+            // The state and the measurement draw at different sizes, so the slot is
+            // reserved at the wider of the two — the handover moves only the text.
+            let reserved = Self.headlineReserve(measurement: formatter.percent(1.0),
+                                                state: device.name)
             guard let utilization = device.utilization else {
-                return PanelSummary(value: device.name, caption: vram, emphasis: .state)
+                return PanelSummary(value: device.name, caption: vram,
+                                    emphasis: .state, reservedWidth: reserved)
             }
             // Device identity belongs in the expanded detail: it is the only
             // caption long enough to break the column.
-            return PanelSummary(value: formatter.percent(utilization), caption: vram)
+            return PanelSummary(value: formatter.percent(utilization), caption: vram,
+                                reservedWidth: reserved)
         case .network:
             guard let network = engine.network.value else { return PanelSummary() }
             // The Wi-Fi row below already names the connection; the caption is only
@@ -249,8 +263,12 @@ extension PanelSummary {
                                 leadSymbol: "arrow.up.right")
         case .disk:
             guard let disk = engine.disk.value, let root = disk.rootVolume else { return PanelSummary() }
+            // The caption is the value's twin in the other unit: "120 GB" and
+            // "24% free" are one answer, so it is measured from the same bytes.
+            let freeFraction = root.totalBytes > 0
+                ? Double(root.availableBytes) / Double(root.totalBytes) : 0
             return PanelSummary(value: formatter.storage(root.availableBytes),
-                                caption: "free")
+                                caption: formatter.percent(freeFraction) + " free")
         case .battery:
             guard let power = engine.power.value else { return PanelSummary() }
             guard power.hasBattery, let percentage = power.percentage else {
@@ -275,6 +293,20 @@ extension PanelSummary {
             guard let system = engine.system.value else { return PanelSummary() }
             return PanelSummary(value: formatter.uptime(system.uptime), caption: "uptime")
         }
+    }
+
+    /// The wider of the steady-state measurement at headline size and the state
+    /// that stands in for it at value size — the slot both can occupy without the
+    /// row moving when one hands over to the other.
+    private static func headlineReserve(measurement: String, state: String) -> CGFloat {
+        let fonts: [NSFont] = [
+            .systemFont(ofSize: Design.Text.headlineSize, weight: .medium),
+            .systemFont(ofSize: Design.Text.valueSize, weight: .medium),
+        ]
+        let widest = zip([measurement, state], fonts).map { string, font in
+            (string as NSString).size(withAttributes: [.font: font]).width
+        }.max() ?? 0
+        return ceil(widest)
     }
 
     /// The width the qualifier column needs to hold the widest caption in `summaries`.
