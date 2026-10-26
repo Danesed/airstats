@@ -224,8 +224,8 @@ extension PanelSummary {
             return PanelSummary(value: formatter.percent(cpu.total.busy))
         case .memory:
             guard let memory = engine.memory.value else { return PanelSummary() }
-            return PanelSummary(value: formatter.memory(memory.usedBytes),
-                                caption: "used")
+            return PanelSummary(value: formatter.percent(memory.pressureFraction),
+                                caption: formatter.memory(memory.usedBytes))
         case .gpu:
             guard let gpu = engine.gpu.value, let device = gpu.primary else { return PanelSummary() }
             // The bare figure, not "Memory 5.4 GB": a caption labels what is on
