@@ -369,13 +369,15 @@ public struct HistoryChart: View {
             .stroke(Design.Palette.secondaryText.opacity(0.5), lineWidth: Design.Space.hairline)
     }
 
-    /// The top of a fixed vertical axis, stated in place; a derived one is reported
-    /// in the footer, where nothing can cover it. Left out when the data reaches
-    /// the band the label sits in: a line along the ceiling states the ceiling
-    /// better than a label it runs through, and a full battery sits there for hours.
+    /// The top of the vertical axis, stated in place. Left out when the data
+    /// reaches the band the label sits in: a line along the ceiling states the
+    /// ceiling better than a label it runs through, and a full battery sits there
+    /// for hours. A derived bound rounds up to a number a person recognises, so
+    /// it reads the same whether the peak is 2 KB/s or 100 MB/s — which is the
+    /// whole reason the label exists.
     @ViewBuilder
     private func boundLabel(_ window: Window) -> some View {
-        if !window.isEmpty && !window.scale.isDerived,
+        if !window.isEmpty,
            window.primary.maximum < window.scale.lowerBound + window.scale.span * Self.boundLabelBand {
             SwiftUI.Text(window.string(window.scale.upperBound, using: formatter))
                 .font(Design.Text.micro)
