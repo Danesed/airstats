@@ -285,10 +285,10 @@ private struct DesktopWidgetModuleView: View {
         engine.network.map { network in
             // The headline keeps its arrow because a bare rate does not say which
             // direction it is going. The line below it is a labelled row like every
-            // other, rather than a bare "↑ 340 KB/s" floating against the right edge.
+            // other, rather than a bare "↗ 340 KB/s" floating against the right edge.
             var readout = DesktopWidgetReadout(
                 module: module,
-                value: "↓ " + formatter.networkRate(network.downloadBytesPerSecond))
+                value: "↙ " + formatter.networkRate(network.downloadBytesPerSecond))
             var details = [
                 DesktopWidgetDetail("up", "Upload", formatter.networkRate(network.uploadBytesPerSecond)),
                 DesktopWidgetDetail("type", "Link", network.connectionType.label),

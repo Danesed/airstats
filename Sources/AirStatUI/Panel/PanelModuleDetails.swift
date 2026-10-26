@@ -244,10 +244,10 @@ extension PanelModuleView {
         }
     }
 
+    /// The header's paired readout already says both rates, so the grid starts at
+    /// the addresses — the part of the answer a headline cannot carry.
     private func networkEntries(_ network: NetworkSnapshot) -> [PanelDetailEntry] {
-        var entries = [
-            PanelDetailEntry("Upload", formatter.networkRate(network.uploadBytesPerSecond)),
-        ]
+        var entries: [PanelDetailEntry] = []
         if let ip = network.localIPv4 {
             entries.append(PanelDetailEntry("Local IP", ip))
         } else if let name = network.primaryInterfaceName {

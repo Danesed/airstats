@@ -17,6 +17,11 @@ struct PanelSummary {
     /// battery states something untrue before the reader gets to the words.
     var icon: String?
     var symbol: String?
+    /// A second reading that leads `value`, direction glyph and all. Only
+    /// network answers with two rates — "↗ 340 KB/s  ↙ 2.4 MB/s"; everywhere
+    /// else one number is the answer.
+    var leadValue: String?
+    var leadSymbol: String?
     var emphasis: Emphasis = .measurement
 }
 
@@ -125,7 +130,7 @@ struct PanelModuleView: View {
             }
         }
         .accessibilityLabel(module.label)
-        .accessibilityValue(summary.value ?? "")
+        .accessibilityValue([summary.leadValue, summary.value].compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint(isExpanded ? "Collapse" : "Expand")
     }
 
@@ -144,16 +149,12 @@ struct PanelModuleView: View {
     private var headlineValue: some View {
         if let value = summary.value {
             HStack(alignment: .firstTextBaseline, spacing: Design.Space.xs) {
-                if let symbol = summary.symbol {
-                    Image(systemName: symbol)
-                        .font(Design.Text.caption.weight(.semibold))
-                        .foregroundStyle(Design.Palette.secondaryText)
+                HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
+                    if let lead = summary.leadValue {
+                        headlineReading(symbol: summary.leadSymbol, value: lead)
+                    }
+                    headlineReading(symbol: summary.symbol, value: value)
                 }
-                Text(value)
-                    .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
-                    .foregroundStyle(Design.Palette.primaryText)
-                    .lineLimit(1)
-                    .contentTransition(.numericText())
                 // The qualifier sits in a shared column so it cannot push the number.
                 //
                 // Inline, a caption shifted its value left by its own width, so across the
@@ -171,6 +172,24 @@ struct PanelModuleView: View {
                         .accessibilityHidden(summary.caption == nil)
                 }
             }
+        }
+    }
+
+    /// One glyph-and-number unit of the headline. Tight internally so the wider
+    /// gap falls between two units, where a second reading needs to separate.
+    @ViewBuilder
+    private func headlineReading(symbol: String?, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Design.Space.xxs) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(Design.Text.caption.weight(.semibold))
+                    .foregroundStyle(Design.Palette.secondaryText)
+            }
+            Text(value)
+                .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
+                .foregroundStyle(Design.Palette.primaryText)
+                .lineLimit(1)
+                .contentTransition(.numericText())
         }
     }
 
@@ -222,7 +241,9 @@ extension PanelSummary {
             // needed when there is no signal row to carry it.
             return PanelSummary(value: formatter.networkRate(network.downloadBytesPerSecond),
                                 caption: network.wifi == nil ? network.connectionType.label : nil,
-                                symbol: "arrow.down")
+                                symbol: "arrow.down.left",
+                                leadValue: formatter.networkRate(network.uploadBytesPerSecond),
+                                leadSymbol: "arrow.up.right")
         case .disk:
             guard let disk = engine.disk.value, let root = disk.rootVolume else { return PanelSummary() }
             return PanelSummary(value: formatter.storage(root.availableBytes),
