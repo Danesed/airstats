@@ -181,6 +181,7 @@ public enum SnapshotFixtures {
                                       totalUploadBytes: 646_857_585,
                                       totalDownloadBytes: 1_920_994_388,
                                       ipv4: "10.0.0.69",
+                                      ipv6: "2001:db8::a25f:9cff:fe1b:77d0",
                                       // A rotating private address and the real one:
                                       // the pair the panel compares for "private".
                                       macAddress: "a2:5f:9c:1b:77:d0",
@@ -197,6 +198,8 @@ public enum SnapshotFixtures {
             publicIP: .value("203.0.113.42"),
             latency: .value(0.042),
             packetLoss: .value(0),
+            routerIPv4: "10.0.0.1",
+            dnsServers: ["1.1.1.1", "9.9.9.9"],
             isVPNActive: false
         )
     }

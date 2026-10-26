@@ -244,16 +244,26 @@ extension PanelModuleView {
                     // after the label, and an IPv6 answer is three times longer again.
                     ReadoutRow("Public IP", publicIP)
                 }
+                if let router = network.routerIPv4 {
+                    ReadoutRow("Router", router)
+                }
+                if !network.dnsServers.isEmpty {
+                    ReadoutRow("DNS", network.dnsServers.joined(separator: " · "))
+                }
                 if let latency = latencyValue(network.latency, loss: network.packetLoss) {
                     ReadoutRow("Latency", latency)
                 }
-                if let primary = network.interfaces.first(where: { $0.name == network.primaryInterfaceName }),
-                   let mac = primary.macAddress {
-                    let private_ = primary.factoryMacAddress != nil
-                        && primary.factoryMacAddress != mac
-                    ReadoutRow("MAC", private_ ? "\(mac) · private" : mac)
-                    if private_, let factory = primary.factoryMacAddress {
-                        ReadoutRow("Factory MAC", factory)
+                if let primary = network.interfaces.first(where: { $0.name == network.primaryInterfaceName }) {
+                    if let ip6 = primary.ipv6 {
+                        ReadoutRow("Local IPv6", ip6)
+                    }
+                    if let mac = primary.macAddress {
+                        let private_ = primary.factoryMacAddress != nil
+                            && primary.factoryMacAddress != mac
+                        ReadoutRow("MAC", private_ ? "\(mac) · private" : mac)
+                        if private_, let factory = primary.factoryMacAddress {
+                            ReadoutRow("Factory MAC", factory)
+                        }
                     }
                 }
                 if engine.networkUsage.today.combined() > 0 {

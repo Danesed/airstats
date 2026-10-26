@@ -88,6 +88,7 @@ public final class NetworkCollector: MetricSource {
     private var macCache: [String: (packed: UInt64, text: String)] = [:]
 
     private var store: SCDynamicStore?
+    private var dnsKey: CFString?
     private var primaryIPv4Key: CFString?
     private var primaryIPv6Key: CFString?
 
@@ -149,6 +150,8 @@ public final class NetworkCollector: MetricSource {
             nil, kSCDynamicStoreDomainState, kSCEntNetIPv4)
         primaryIPv6Key = SCDynamicStoreKeyCreateNetworkGlobalEntity(
             nil, kSCDynamicStoreDomainState, kSCEntNetIPv6)
+        dnsKey = SCDynamicStoreKeyCreateNetworkGlobalEntity(
+            nil, kSCDynamicStoreDomainState, kSCEntNetDNS)
 
         if linkBuffer == nil {
             linkBufferSize = 16 * 1024
@@ -173,6 +176,7 @@ public final class NetworkCollector: MetricSource {
 
     public func stop() {
         store = nil
+        dnsKey = nil
         primaryIPv4Key = nil
         primaryIPv6Key = nil
         free(linkBuffer)
@@ -301,6 +305,8 @@ public final class NetworkCollector: MetricSource {
         lossProbe.refreshIfDue()
 
         let primaryName = primaryInterfaceName()
+        let router = routerAddress()
+        let dns = resolverAddresses()
         let primary = primaryName.flatMap { name in stats.first { $0.name == name } }
         sort(&stats, primaryName: primaryName)
 
@@ -323,6 +329,7 @@ public final class NetworkCollector: MetricSource {
             publicIP: publicIPLookup.currentState(),
             latency: latencyProbe.currentState(),
             packetLoss: lossProbe.currentState(),
+            routerIPv4: router, dnsServers: dns,
             isVPNActive: vpnActive))
     }
 
@@ -670,6 +677,23 @@ public final class NetworkCollector: MetricSource {
             return name
         }
         return nil
+    }
+
+    /// The default router and the resolver list, from the same configd store the
+    /// primary interface comes from. These are the two numbers "is it the router
+    /// or is it the ISP" is actually asked with.
+    private func routerAddress() -> String? {
+        guard let store, let primaryIPv4Key,
+              let entity = SCDynamicStoreCopyValue(store, primaryIPv4Key) as? [String: Any]
+        else { return nil }
+        return entity["Router"] as? String
+    }
+
+    private func resolverAddresses() -> [String] {
+        guard let store, let dnsKey,
+              let entity = SCDynamicStoreCopyValue(store, dnsKey) as? [String: Any]
+        else { return [] }
+        return entity["ServerAddresses"] as? [String] ?? []
     }
 
     // MARK: Wi-Fi
