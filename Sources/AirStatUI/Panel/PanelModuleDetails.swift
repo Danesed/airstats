@@ -76,8 +76,8 @@ extension PanelModuleView {
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 coreClusters(cpu)
                 PanelDetailGrid(entries: [
-                    // The 1-minute load is already in the header; the grid adds the
-                    // two slower averages instead of repeating it.
+                    // The 1-minute load is already in the header caption; the grid
+                    // adds the two slower averages instead of repeating it.
                     PanelDetailEntry("Load 5m", formatter.fixed(cpu.loadAverage.five, decimals: 1)),
                     PanelDetailEntry("Load 15m", formatter.fixed(cpu.loadAverage.fifteen, decimals: 1)),
                     PanelDetailEntry("Threads", formatter.count(cpu.threadCount)),
