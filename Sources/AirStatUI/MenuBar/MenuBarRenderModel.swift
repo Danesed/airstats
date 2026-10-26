@@ -359,7 +359,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 // Rounded off the clamped charge rather than off the raw percentage, so
                 // the digits and the fill can never disagree about how full it is.
                 battery = BatteryState(charge: charge, isCharging: power.isCharging,
-                                       isLow: isLow,
+                                       isPluggedIn: power.isPluggedIn, isLow: isLow,
                                        valueText: String(Int((charge * 100).rounded())))
                 // The indicator style takes the digits off the screen, so this is the
                 // only place the exact charge is still stated. It says everything the
@@ -386,6 +386,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 if let pct = power.percentage {
                     let charge = min(max(pct / 100, 0), 1)
                     battery = BatteryState(charge: charge, isCharging: power.isCharging,
+                                           isPluggedIn: power.isPluggedIn,
                                            isLow: false, valueText: "")
                 }
             }
@@ -429,6 +430,9 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     private struct BatteryState {
         var charge: Double
         var isCharging: Bool
+        /// On AC power. True at 100 % and while a charge limit holds the level,
+        /// which is the state the system's own plug glyph answers.
+        var isPluggedIn: Bool
         var isLow: Bool
         var valueText: String
     }
@@ -609,7 +613,10 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             // the same two things its indicator does: how full, and whether power
             // is going in. The level follows the quarters macOS ships glyphs for.
             guard let battery else { return "battery.100percent" }
+            // Charging takes the bolt; plugged-in but not charging takes the plug,
+            // which is how the system glyphs say "full on AC" and "charge held".
             if battery.isCharging { return "battery.100percent.bolt" }
+            if battery.isPluggedIn { return "powerplug" }
             switch battery.charge {
             case ..<0.13: return "battery.0percent"
             case ..<0.38: return "battery.25percent"

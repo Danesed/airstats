@@ -240,6 +240,20 @@ struct BatteryIconTests {
                 == "battery.100percent.bolt")
     }
 
+    @Test("plugged in but not charging takes the plug, like the system's own")
+    func pluggedNotChargingShowsThePlug() {
+        var snapshot = SnapshotFixtures.nominal
+        snapshot.power = .value(PowerSnapshot(hasBattery: true, percentage: 100,
+                                             isCharging: false, isPluggedIn: true,
+                                             isFullyCharged: true))
+        let config = MenuBarItemConfig(metric: .battery, style: .iconAndText)
+        let model = MenuBarRenderModel(
+            snapshot: snapshot, history: SnapshotFixtures.history(),
+            settings: Settings(menuBar: MenuBarSettings(items: [config])),
+            isStale: false)
+        #expect(model.items[0].symbolName == "powerplug")
+    }
+
     @Test("with no battery the icon is a plain full battery, not a phantom bolt")
     func noBatteryKeepsTheStaticIcon() {
         var settings = Settings()
