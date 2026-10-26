@@ -119,6 +119,9 @@ public final class NetworkCollector: MetricSource {
     /// a closed panel means no probe traffic at all.
     private let latencyProbe = LatencyProbe()
 
+    /// Same gate and cadence contract as the latency probe, for the loss figure.
+    private let lossProbe = PacketLossProbe()
+
     public init() {}
 
     /// Pushed in from `SamplingCore` when the setting changes, because a collector has
@@ -127,9 +130,10 @@ public final class NetworkCollector: MetricSource {
         publicIPLookup.setEnabled(enabled)
     }
 
-    /// Same push-down as the IP lookup: the probe runs only while the panel is open.
+    /// Same push-down as the IP lookup: the probes run only while the panel is open.
     func setLatencyProbeEnabled(_ enabled: Bool) {
         latencyProbe.setEnabled(enabled)
+        lossProbe.setEnabled(enabled)
     }
 
     public func start() {
@@ -294,6 +298,7 @@ public final class NetworkCollector: MetricSource {
         // a server on the far side of the internet.
         publicIPLookup.refreshIfDue()
         latencyProbe.refreshIfDue()
+        lossProbe.refreshIfDue()
 
         let primaryName = primaryInterfaceName()
         let primary = primaryName.flatMap { name in stats.first { $0.name == name } }
@@ -317,6 +322,7 @@ public final class NetworkCollector: MetricSource {
             // is the cached answer of the opt-in fetcher above, read under its lock.
             publicIP: publicIPLookup.currentState(),
             latency: latencyProbe.currentState(),
+            packetLoss: lossProbe.currentState(),
             isVPNActive: vpnActive))
     }
 

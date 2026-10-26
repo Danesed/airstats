@@ -244,7 +244,7 @@ extension PanelModuleView {
                     // after the label, and an IPv6 answer is three times longer again.
                     ReadoutRow("Public IP", publicIP)
                 }
-                if let latency = latencyValue(network.latency) {
+                if let latency = latencyValue(network.latency, loss: network.packetLoss) {
                     ReadoutRow("Latency", latency)
                 }
                 if let primary = network.interfaces.first(where: { $0.name == network.primaryInterfaceName }),
@@ -298,15 +298,25 @@ extension PanelModuleView {
         "↓ \(formatter.storage(totals.download)) · ↑ \(formatter.storage(totals.upload))"
     }
 
-    /// The latency row, or nil while the panel is closed — the probe is off then,
-    /// so "no row" is what "not probed" looks like rather than an idle field.
-    private func latencyValue(_ state: MetricState<TimeInterval>) -> String? {
+    /// The latency row, or nil while the panel is closed — the probes are off
+    /// then, so "no row" is what "not probed" looks like rather than an idle field.
+    /// The loss figure rides in the same row: "42 ms · 0% loss" — two answers to
+    /// one question about the same path.
+    private func latencyValue(_ state: MetricState<TimeInterval>,
+                              loss: MetricState<Double>) -> String? {
+        var latency: String?
         switch state {
-        case .value(let seconds): return formatter.fixed(seconds * 1_000, decimals: 0) + " ms"
-        case .failure(.unsupported): return nil
-        case .failure(.pending): return "Probing…"
-        case .failure: return MetricFormatter.unavailable
+        case .value(let seconds): latency = formatter.fixed(seconds * 1_000, decimals: 0) + " ms"
+        case .failure(.unsupported): break
+        case .failure(.pending): latency = "Probing…"
+        case .failure: latency = MetricFormatter.unavailable
         }
+        var lossText: String?
+        if case .value(let fraction) = loss {
+            lossText = "\(formatter.fixed(fraction * 100, decimals: 0))% loss"
+        }
+        guard latency != nil || lossText != nil else { return nil }
+        return [latency, lossText].compactMap { $0 }.joined(separator: " · ")
     }
 
     /// Signal strength with the negotiated rate beside it: the two together are what

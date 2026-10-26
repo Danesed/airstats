@@ -196,6 +196,7 @@ public enum SnapshotFixtures {
             // opt-in lookup fills in without any machine's real address in the source.
             publicIP: .value("203.0.113.42"),
             latency: .value(0.042),
+            packetLoss: .value(0),
             isVPNActive: false
         )
     }
