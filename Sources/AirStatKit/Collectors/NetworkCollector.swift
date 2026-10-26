@@ -1,6 +1,7 @@
 import CoreWLAN
 import Darwin
 import Foundation
+import IOKit
 import SystemConfiguration
 
 /// Throughput, per-interface counters, Wi-Fi link quality, addresses.
@@ -33,6 +34,10 @@ public final class NetworkCollector: MetricSource {
         var type: ConnectionType
         /// Bridges, bonds and VLANs re-report the bytes of the ports they are built on.
         var aggregatesMembers: Bool
+        /// The address burned into the hardware, kept beside the interface's current
+        /// one so the panel can tell a rotating private Wi-Fi address from the real
+        /// thing. Read once per scan; the factory address does not change.
+        var factoryMAC: String?
     }
 
     /// One interface exactly as the kernel currently reports it.
@@ -256,7 +261,8 @@ public final class NetworkCollector: MetricSource {
                 totalDownloadBytes: link.inBytes,
                 ipv4: link.ipv4,
                 ipv6: link.ipv6,
-                macAddress: macCache[link.name]?.text))
+                macAddress: macCache[link.name]?.text,
+                factoryMacAddress: hardwarePorts[link.name]?.factoryMAC))
         }
 
         // Before any early return: pruning is bookkeeping about which interfaces still
@@ -522,7 +528,38 @@ public final class NetworkCollector: MetricSource {
                 displayName: SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?
                     ?? bsdName,
                 type: Self.scTypes[scType] ?? .other,
-                aggregatesMembers: Self.aggregatingSCTypes.contains(scType))
+                aggregatesMembers: Self.aggregatingSCTypes.contains(scType),
+                factoryMAC: nil)
+        }
+        readFactoryMACs()
+    }
+
+    /// The MAC each interface was manufactured with, from its IOKit node.
+    ///
+    /// `getifaddrs` reports the address the interface currently answers to, which on
+    /// Wi-Fi is the rotating private one macOS substitutes per network — the panel's
+    /// "is my MAC private" question is exactly the difference between the two. The
+    /// IOKit answer lives on the `IO80211Interface`/`IOEthernetInterface` node under
+    /// `IOMACAddress` and is matched back by `BSD Name`.
+    private func readFactoryMACs() {
+        for className in ["IO80211Interface", "IOEthernetInterface"] {
+            var iterator: io_iterator_t = 0
+            guard IOServiceGetMatchingServices(kIOMainPortDefault,
+                                               IOServiceMatching(className),
+                                               &iterator) == KERN_SUCCESS else { continue }
+            while case let service = IOIteratorNext(iterator), service != IO_OBJECT_NULL {
+                defer { IOObjectRelease(service) }
+                guard let bsd = IORegistryEntryCreateCFProperty(service, "BSD Name" as CFString,
+                                                              kCFAllocatorDefault, 0)?
+                    .takeRetainedValue() as? String,
+                      let data = IORegistryEntryCreateCFProperty(service, "IOMACAddress" as CFString,
+                                                                 kCFAllocatorDefault, 0)?
+                    .takeRetainedValue() as? Data, data.count == 6,
+                      hardwarePorts[bsd] != nil else { continue }
+                hardwarePorts[bsd]?.factoryMAC =
+                    data.map { String(format: "%02x", $0) }.joined(separator: ":")
+            }
+            IOObjectRelease(iterator)
         }
     }
 

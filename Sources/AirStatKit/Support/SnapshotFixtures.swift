@@ -180,7 +180,11 @@ public enum SnapshotFixtures {
                                       uploadBytesPerSecond: up, downloadBytesPerSecond: down,
                                       totalUploadBytes: 646_857_585,
                                       totalDownloadBytes: 1_920_994_388,
-                                      ipv4: "10.0.0.69"),
+                                      ipv4: "10.0.0.69",
+                                      // A rotating private address and the real one:
+                                      // the pair the panel compares for "private".
+                                      macAddress: "a2:5f:9c:1b:77:d0",
+                                      factoryMacAddress: "3c:22:fb:8a:4e:61"),
             ],
             primaryInterfaceName: "en0",
             connectionType: .wifi,

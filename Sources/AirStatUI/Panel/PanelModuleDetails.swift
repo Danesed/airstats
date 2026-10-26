@@ -247,6 +247,15 @@ extension PanelModuleView {
                 if let latency = latencyValue(network.latency) {
                     ReadoutRow("Latency", latency)
                 }
+                if let primary = network.interfaces.first(where: { $0.name == network.primaryInterfaceName }),
+                   let mac = primary.macAddress {
+                    let private_ = primary.factoryMacAddress != nil
+                        && primary.factoryMacAddress != mac
+                    ReadoutRow("MAC", private_ ? "\(mac) · private" : mac)
+                    if private_, let factory = primary.factoryMacAddress {
+                        ReadoutRow("Factory MAC", factory)
+                    }
+                }
                 if let wifi = network.wifi, let quality = wifi.signalQuality {
                     // The network's name labels its own signal bar; a row that said
                     // "Signal" and a row that said "Network" would be two lines

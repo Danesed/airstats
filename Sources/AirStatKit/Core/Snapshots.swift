@@ -235,11 +235,16 @@ public struct NetworkInterfaceStats: Sendable, Equatable, Hashable, Identifiable
     public var ipv4: String?
     public var ipv6: String?
     public var macAddress: String?
+    /// The address the hardware shipped with, when it differs from `macAddress`.
+    /// On Wi-Fi the current address is usually the rotating private one, and the
+    /// difference between the two is what "is my MAC private" asks.
+    public var factoryMacAddress: String?
 
     public init(name: String, displayName: String, type: ConnectionType, isActive: Bool,
                 uploadBytesPerSecond: Double = 0, downloadBytesPerSecond: Double = 0,
                 totalUploadBytes: UInt64 = 0, totalDownloadBytes: UInt64 = 0,
-                ipv4: String? = nil, ipv6: String? = nil, macAddress: String? = nil) {
+                ipv4: String? = nil, ipv6: String? = nil, macAddress: String? = nil,
+                factoryMacAddress: String? = nil) {
         self.name = name
         self.displayName = displayName
         self.type = type
@@ -251,6 +256,7 @@ public struct NetworkInterfaceStats: Sendable, Equatable, Hashable, Identifiable
         self.ipv4 = ipv4
         self.ipv6 = ipv6
         self.macAddress = macAddress
+        self.factoryMacAddress = factoryMacAddress
     }
 }
 
