@@ -60,8 +60,11 @@ public struct MenuBarItemRender: Equatable, Sendable {
     /// changes, so a battery drawn from a value the view fetched itself would keep
     /// showing the charge from whenever some *other* readout last moved.
     public var batteryCharge: Double?
-    /// Power is going in. Drawn as a bolt over the fill.
+    /// Power is going in. Drawn as a bolt inside the shell, in place of the digits.
     public var isBatteryCharging: Bool
+    /// On mains. With `isBatteryCharging` false it is a full or held battery, and
+    /// drawn as a plug inside the shell in place of the digits.
+    public var isBatteryPlugged: Bool
     /// Charge at or below `MenuBarItemRender.lowBatteryFraction` and not charging.
     /// Carried rather than recomputed in the view so the threshold lives in one place.
     public var isBatteryLow: Bool
@@ -121,6 +124,7 @@ public struct MenuBarItemRender: Equatable, Sendable {
                 accessibilityLabel: String,
                 batteryCharge: Double? = nil,
                 isBatteryCharging: Bool = false,
+                isBatteryPlugged: Bool = false,
                 isBatteryLow: Bool = false,
                 batteryValueText: String? = nil,
                 networkStatus: NetworkStatus? = nil,
@@ -136,6 +140,7 @@ public struct MenuBarItemRender: Equatable, Sendable {
         self.accessibilityLabel = accessibilityLabel
         self.batteryCharge = batteryCharge
         self.isBatteryCharging = isBatteryCharging
+        self.isBatteryPlugged = isBatteryPlugged
         self.isBatteryLow = isBatteryLow
         self.batteryValueText = batteryValueText
         self.networkStatus = networkStatus
@@ -476,6 +481,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             accessibilityLabel: accessibility,
             batteryCharge: battery?.charge,
             isBatteryCharging: battery?.isCharging ?? false,
+            isBatteryPlugged: battery?.isPluggedIn ?? false,
             isBatteryLow: battery?.isLow ?? false,
             batteryValueText: battery?.valueText,
             networkStatus: networkStatus,

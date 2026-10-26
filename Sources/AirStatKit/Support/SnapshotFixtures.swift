@@ -80,6 +80,24 @@ public enum SnapshotFixtures {
         )
     }
 
+    /// Full and still on mains: the adapter is feeding the machine while the battery
+    /// takes nothing, which is the state the plug glyph stands for. Its own scenario
+    /// for the same reason `charging` is — the menu bar draws it differently and no
+    /// other fixture puts it there.
+    public static var charged: SystemSnapshot {
+        var snapshot = nominal
+        var power = power(percent: 100, charging: false)
+        power.isPluggedIn = true
+        power.isFullyCharged = true
+        power.amperage = 0
+        power.batteryWatts = 0
+        power.timeToEmpty = nil
+        power.adapterWatts = 96
+        power.adapterName = "96W USB-C Power Adapter"
+        snapshot.power = .value(power)
+        return snapshot
+    }
+
     /// Nothing sampled yet — the first frame after launch.
     public static var pending: SystemSnapshot { SystemSnapshot() }
 

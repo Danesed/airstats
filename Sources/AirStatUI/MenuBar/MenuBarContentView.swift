@@ -90,12 +90,14 @@ public final class MenuBarContentView: NSView {
         /// The digits inside the shell. Medium rather than regular: a knocked-out stem
         /// one device pixel wide comes out as a dotted line at 1x.
         static let batteryValueFontSize: CGFloat = 9
-        /// The charging bolt, beside the shell. 6.5 by 10 is `bolt.fill`'s own ink
-        /// aspect of 0.639, at the largest height that still sits inside a 14-point
-        /// shell's line.
+        /// The charging bolt's ink aspect: 6.5 by 10 is `bolt.fill`'s own 0.639.
+        /// Inside the shell it is set to `batteryInnerGlyphHeight`, keeping the ratio.
         static let batteryBoltHeight: CGFloat = 10
         static let batteryBoltWidth: CGFloat = 6.5
-        static let batteryBoltGap: CGFloat = 1.5
+        /// The height of whatever the shell holds in place of the digits while the
+        /// machine is on mains — the bolt while charging, the plug while held. One
+        /// point under the track's ten so the glyph keeps the air the digits kept.
+        static let batteryInnerGlyphHeight: CGFloat = 9
         /// The network status lights: two dots stacked, download over upload. Five
         /// points each with three between puts the pair at 13, which sits inside the
         /// bar with the same air the stacked type gets, and a five-point dot is still
@@ -305,19 +307,11 @@ public final class MenuBarContentView: NSView {
             return geometry
         }
 
-        // The indicator is the whole readout: its number is inside it, and nothing else
-        // is drawn beside it.
-        //
-        // The bolt's slot is only there while there is a bolt in it. Reserving it
-        // empty kept the item from moving when a charger went in, but it put eight
-        // points of air before the shell for the whole of every day spent on battery,
-        // and that read as a margin nobody asked for. A plug is a rare event, not a
-        // per-sample one, and the item moving once for it is the cheaper thing.
+        // The indicator is the whole readout and the shell is a fixed box: everything
+        // it says — fill, digits, bolt, plug — is said inside it, so nothing about
+        // its width ever moves.
         if item.style == .battery {
             geometry.battery = Layout.batteryBodyWidth + Layout.batteryNubGap + Layout.batteryNubWidth
-            if item.isBatteryCharging {
-                geometry.battery += Layout.batteryBoltWidth + Layout.batteryBoltGap
-            }
             return geometry
         }
 
@@ -839,25 +833,15 @@ public final class MenuBarContentView: NSView {
     /// charge fetched at draw time would sit at whatever it was when some *other*
     /// readout last moved, and a battery that is wrong is worse than no battery.
     ///
-    /// Laid out left to right as bolt, shell, terminal, with the bolt present only
-    /// while charging. The bolt sits outside the shell now that the number is inside
-    /// it: two things cannot share those 20 points, and between a bolt drawn over the
-    /// digits and a bolt beside them, the number is the one the user asked to always
-    /// be able to read.
+    /// Inside the shell sits the state of the charge itself: the digits while on
+    /// battery, the bolt while current is going in, and the plug while on mains
+    /// with the battery full or held. The glyphs get the digits' knock-out
+    /// treatment, so a fill edge running through one splits it like a digit.
     private func drawBattery(_ item: MenuBarItemRender, x: CGFloat, colors: ItemColors,
                              scale: CGFloat, context: CGContext) {
         let pixel = 1 / scale
         let line = max(Layout.batteryStroke, pixel)
         let ink = colors.batteryInk
-
-        var x = x
-        if item.isBatteryCharging {
-            let slot = CGRect(x: x, y: bounds.midY - Layout.batteryBoltHeight / 2,
-                              width: Layout.batteryBoltWidth,
-                              height: Layout.batteryBoltHeight)
-            drawChargingBolt(in: slot, color: ink, scale: scale, context: context)
-            x += Layout.batteryBoltWidth + Layout.batteryBoltGap
-        }
 
         // Snapped outer box, then everything measured off it, so the stroke lands on a
         // half-pixel at 1x and the fill's edges land on whole ones.
@@ -911,10 +895,76 @@ public final class MenuBarContentView: NSView {
             context.fillPath()
         }
 
-        if let text = item.batteryValueText {
+        if item.isBatteryCharging {
+            let height = Layout.batteryInnerGlyphHeight
+            let width = height * Layout.batteryBoltWidth / Layout.batteryBoltHeight
+            let box = CGRect(x: outer.midX - width / 2, y: outer.midY - height / 2,
+                             width: width, height: height)
+            drawAcrossFillEdge(fillEdge, context: context) { clears, context in
+                context.addPath(batteryBoltPath(in: box, scale: scale))
+                context.clip()
+                if clears {
+                    context.clear(bounds)
+                } else {
+                    context.setFillColor(ink.cgColor)
+                    context.fill(bounds)
+                }
+            }
+        } else if item.isBatteryPlugged,
+                  let plug = plugGlyph(scale: scale) {
+            let height = Layout.batteryInnerGlyphHeight
+            let rect = CGRect(x: outer.midX - height * plug.size.width / plug.size.height / 2,
+                              y: outer.midY - height / 2,
+                              width: height * plug.size.width / plug.size.height,
+                              height: height)
+            drawAcrossFillEdge(fillEdge, context: context) { clears, context in
+                context.clip(to: rect, mask: plug.image)
+                if clears {
+                    context.clear(bounds)
+                } else {
+                    context.setFillColor(ink.cgColor)
+                    context.fill(bounds)
+                }
+            }
+        } else if let text = item.batteryValueText {
             drawBatteryValue(text, in: outer, fillEdge: fillEdge, ink: ink,
                              scale: scale, context: context)
         }
+    }
+
+    /// Runs `paint` the way the digits are drawn: once clipped to the filled part
+    /// and once to the rest, so a glyph the fill's edge runs through can be
+    /// knocked out on one side and painted on the other, like a digit.
+    private func drawAcrossFillEdge(_ fillEdge: CGFloat, context: CGContext,
+                                    paint: (_ clears: Bool, _ context: CGContext) -> Void) {
+        if fillEdge > bounds.minX {
+            context.saveGState()
+            context.clip(to: CGRect(x: bounds.minX, y: bounds.minY,
+                                    width: fillEdge - bounds.minX, height: bounds.height))
+            paint(true, context)
+            context.restoreGState()
+        }
+        context.saveGState()
+        context.clip(to: CGRect(x: fillEdge, y: bounds.minY,
+                                width: bounds.maxX - fillEdge, height: bounds.height))
+        paint(false, context)
+        context.restoreGState()
+    }
+
+    /// The `powerplug` symbol's silhouette, for the shell while the machine is on
+    /// mains and the battery is taking nothing. Used as a clip mask: the colour is
+    /// decided per pass, so only the alpha matters. Nil if the symbol lookup fails
+    /// — the digits then stay in the shell instead.
+    private func plugGlyph(scale: CGFloat) -> (image: CGImage, size: CGSize)? {
+        guard let template = symbol(named: "powerplug",
+                                    pointSize: Layout.batteryInnerGlyphHeight),
+              let tinted = tinted(SymbolAsset(name: "powerplug",
+                                              pointSize: Layout.batteryInnerGlyphHeight,
+                                              template: template),
+                                  color: .black, scale: scale),
+              let rep = tinted.representations.first as? NSBitmapImageRep,
+              let image = rep.cgImage else { return nil }
+        return (image, rep.size)
     }
 
     /// The percentage, centred in the shell and drawn twice.
@@ -959,10 +1009,12 @@ public final class MenuBarContentView: NSView {
         context.restoreGState()
     }
 
-    private func drawChargingBolt(in slot: CGRect, color: NSColor, scale: CGFloat,
-                                  context: CGContext) {
-        let box = CGRect(x: snap(slot.minX, scale), y: snap(slot.minY, scale),
-                         width: slot.width, height: slot.height)
+    /// The bolt in `batteryBoltPoints` mapped into `box`. A path rather than the
+    /// symbol for the reason in `batteryBoltPoints`: a template `NSImage` cannot be
+    /// tinted by this context, so it is given the colour along with the shape.
+    private func batteryBoltPath(in box: CGRect, scale: CGFloat) -> CGPath {
+        let box = CGRect(x: snap(box.minX, scale), y: snap(box.minY, scale),
+                         width: box.width, height: box.height)
         let bolt = CGMutablePath()
         for (index, point) in Layout.batteryBoltPoints.enumerated() {
             let mapped = CGPoint(x: box.minX + point.x * box.width,
@@ -970,9 +1022,7 @@ public final class MenuBarContentView: NSView {
             index == 0 ? bolt.move(to: mapped) : bolt.addLine(to: mapped)
         }
         bolt.closeSubpath()
-        context.addPath(bolt)
-        context.setFillColor(color.cgColor)
-        context.fillPath()
+        return bolt
     }
 
     // MARK: Graphs

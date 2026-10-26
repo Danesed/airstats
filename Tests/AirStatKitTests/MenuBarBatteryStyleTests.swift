@@ -177,6 +177,18 @@ struct BatteryRenderModelTests {
                 == "Battery 8%, low")
     }
 
+    /// On mains the shell holds a glyph instead of the digits — the bolt while
+    /// charging, the plug while full or held — so the plugged flag has to travel
+    /// with the rest of the battery state, distinct from charging.
+    @Test("plugged in is carried separately from charging")
+    func pluggedIsCarried() {
+        let charged = item(SnapshotFixtures.charged)
+        #expect(charged.isBatteryPlugged)
+        #expect(!charged.isBatteryCharging)
+        #expect(item(snapshot(percent: 40, charging: true)).isBatteryPlugged)
+        #expect(!item(snapshot(percent: 40, charging: false)).isBatteryPlugged)
+    }
+
     /// The fields are on every readout, so they have to stay nil on the ones that are
     /// not a battery rather than defaulting to a plausible-looking zero.
     @Test("other readouts carry no battery state")
@@ -188,6 +200,7 @@ struct BatteryRenderModelTests {
                                        isStale: false)
         #expect(model.items[0].batteryCharge == nil)
         #expect(!model.items[0].isBatteryCharging)
+        #expect(!model.items[0].isBatteryPlugged)
     }
 
     /// The indicator names its own metric, and a caption beside it would say "BATT"
@@ -295,9 +308,7 @@ struct BatteryIconTests {
 @Suite("The indicator holds its width and draws at both scales")
 struct BatteryDrawingTests {
 
-    private func model(percent: Double, charging: Bool) -> MenuBarRenderModel {
-        var snapshot = SnapshotFixtures.nominal
-        snapshot.power = .value(SnapshotFixtures.power(percent: percent, charging: charging))
+    private func model(_ snapshot: SystemSnapshot) -> MenuBarRenderModel {
         let config = MenuBarItemConfig(metric: .battery, style: .battery, showsCaption: false)
         return MenuBarRenderModel(snapshot: snapshot,
                                   history: SnapshotFixtures.history(),
@@ -305,20 +316,23 @@ struct BatteryDrawingTests {
                                   isStale: false)
     }
 
-    private func width(percent: Double, charging: Bool = false) -> CGFloat {
+    private func width(_ snapshot: SystemSnapshot) -> CGFloat {
         let view = MenuBarContentView(frame: .zero)
-        view.update(with: model(percent: percent, charging: charging))
+        view.update(with: model(snapshot))
         return view.intrinsicContentSize.width
     }
 
+    private func width(percent: Double, charging: Bool = false) -> CGFloat {
+        var snapshot = SnapshotFixtures.nominal
+        snapshot.power = .value(SnapshotFixtures.power(percent: percent, charging: charging))
+        return width(snapshot)
+    }
+
     /// The one thing a menu bar must never do is move, and the charge changes every
-    /// sample. The shell is a fixed size and only its fill moves inside it.
-    ///
-    /// Charging is the one thing allowed to change the width. The bolt is drawn outside
-    /// the shell and its slot exists only while there is a bolt in it: a plug is a
-    /// rare event, and eight points of empty air before the shell all day was the
-    /// price of never moving for it.
-    @Test("the item is the same width at every charge, and wider only while charging")
+    /// sample. The shell is a fixed size and everything it says is said inside it:
+    /// only the fill moves, and a charger event swaps digits for a glyph without
+    /// buying it a slot of its own.
+    @Test("the item is the same width at every charge and in every power state")
     func widthIsFixed() {
         let full = width(percent: 100)
         #expect(width(percent: 0) == full)
@@ -326,15 +340,15 @@ struct BatteryDrawingTests {
         #expect(width(percent: 51) == full)
         // One and three digits are the widest and narrowest numbers it can hold.
         #expect(width(percent: 7) == full)
-        let charging = width(percent: 64, charging: true)
-        #expect(charging > full)
-        #expect(width(percent: 100, charging: true) == charging)
-        #expect(width(percent: 3, charging: true) == charging)
+        #expect(width(percent: 64, charging: true) == full)
+        #expect(width(percent: 3, charging: true) == full)
+        #expect(width(SnapshotFixtures.charged) == full)
     }
 
-    /// Exercises the real drawing path, including the bolt's cleared gap, at both
-    /// backing scales and in both appearances. It cannot judge how it looks; it can
-    /// prove that every state produces pixels instead of trapping or coming back blank.
+    /// Exercises the real drawing path — digits on battery, the bolt and the plug
+    /// knocked out of the fill — at both backing scales and in both appearances.
+    /// It cannot judge how it looks; it can prove that every state produces pixels
+    /// instead of trapping or coming back blank.
     @Test("every battery state renders at both scales in both appearances")
     func rendersEveryState() throws {
         let directory = FileManager.default.temporaryDirectory
