@@ -13,6 +13,7 @@ final class PanelLayoutState {
     /// The collapsed set a disclosure started from, held until it has finished.
     var disclosureOrigin: Set<PanelModule>?
     var isDisclosureTransitionActive = false
+    var focusedModule: PanelModule?
     @ObservationIgnored var toggleModule: ((PanelModule) -> Void)?
 }
 

@@ -141,14 +141,23 @@ struct PanelModuleView: View {
         .accessibilityHint(isExpanded ? "Collapse" : "Expand")
     }
 
+    private var isKeyboardFocused: Bool {
+        layout?.focusedModule == module
+    }
+
     @ViewBuilder
     private var hoverHighlight: some View {
+        let isFocused = isKeyboardFocused
+        let isHovered = isHovering && layout?.isDisclosureTransitionActive != true
         RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
             // Rows move under a stationary pointer during disclosure. Hiding the
             // highlight while they travel prevents it flashing from one row to the
             // next; onHover still tracks the final row underneath for the next frame.
-            .fill(isHovering && layout?.isDisclosureTransitionActive != true
-                  ? Design.Palette.track : .clear)
+            .fill(isHovered || isFocused ? Design.Palette.track : .clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                    .stroke(Design.Palette.secondaryText.opacity(0.4), lineWidth: isFocused ? 1 : 0)
+            )
             .padding(.horizontal, Design.Space.s)
     }
 
@@ -205,9 +214,66 @@ struct PanelModuleView: View {
             }
             Text(value)
                 .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
-                .foregroundStyle(Design.Palette.primaryText)
+                .foregroundStyle(headlineColor)
                 .lineLimit(1)
                 .contentTransition(.numericText())
+        }
+    }
+
+    private enum ModuleAlertLevel {
+        case none, warning, critical
+    }
+
+    private var alertLevel: ModuleAlertLevel {
+        switch module {
+        case .cpu:
+            if let busy = engine.cpu.value?.total.busy {
+                if busy >= 0.95 { return .critical }
+                if busy >= 0.80 { return .warning }
+            }
+        case .memory:
+            if let fraction = engine.memory.value?.pressureFraction {
+                if fraction >= 0.80 { return .critical }
+                if fraction >= 0.60 { return .warning }
+            }
+        case .thermal:
+            if let thermal = engine.thermal.value {
+                if thermal.pressure == .critical || (thermal.cpuCelsius ?? 0) >= 95 {
+                    return .critical
+                }
+                if thermal.pressure == .serious || (thermal.cpuCelsius ?? 0) >= 85 {
+                    return .warning
+                }
+            }
+        case .battery:
+            if let power = engine.power.value, !power.isPluggedIn, let pct = power.percentage {
+                if pct <= 10 { return .critical }
+                if pct <= 20 { return .warning }
+            }
+        case .disk:
+            if let root = engine.disk.value?.rootVolume {
+                if root.usedFraction >= 0.95 { return .critical }
+                if root.usedFraction >= 0.85 { return .warning }
+            }
+        case .gpu:
+            if let util = engine.gpu.value?.primary?.utilization {
+                if util >= 0.95 { return .critical }
+                if util >= 0.80 { return .warning }
+            }
+        default:
+            break
+        }
+        return .none
+    }
+
+    private var headlineColor: Color {
+        guard settings.settings.panel.showsAlertColors else {
+            return Design.Palette.primaryText
+        }
+        switch alertLevel {
+        case .none: return Design.Palette.primaryText
+        case .warning: return Color.orange
+        case .critical: return Color.red
         }
     }
 

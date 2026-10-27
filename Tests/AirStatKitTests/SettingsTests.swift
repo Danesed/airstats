@@ -253,4 +253,25 @@ struct HistoryCapacityTests {
         // 7200 samples would be honest but wasteful; the cap keeps memory predictable.
         #expect(settings.historyCapacity == 4096)
     }
+
+    @Test("miniGraph style is offered in general styles and shows a graph")
+    func miniGraphStyleProperties() {
+        #expect(MenuBarDisplayStyle.general.contains(.miniGraph))
+        #expect(MenuBarDisplayStyle.miniGraph.showsGraph)
+        #expect(MenuBarDisplayStyle.miniGraph.supportsCaption)
+        #expect(MenuBarDisplayStyle.miniGraph.label == "Mini Graph")
+        #expect(!MenuBarDisplayStyle.text.showsGraph)
+        #expect(!MenuBarDisplayStyle.iconAndText.showsGraph)
+    }
+
+    @Test("showsAlertColors defaults to true and round trips in settings")
+    func showsAlertColorsRoundTrip() throws {
+        let defaults = Settings()
+        #expect(defaults.panel.showsAlertColors == true)
+        var off = Settings()
+        off.panel.showsAlertColors = false
+        let data = try JSONEncoder().encode(off)
+        let decoded = try JSONDecoder().decode(Settings.self, from: data)
+        #expect(decoded.panel.showsAlertColors == false)
+    }
 }

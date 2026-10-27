@@ -137,6 +137,11 @@ public final class NetworkCollector: MetricSource {
         lossProbe.setEnabled(enabled)
     }
 
+    /// Triggers an immediate probe of network latency.
+    func triggerLatencyProbe() {
+        latencyProbe.triggerProbe()
+    }
+
     public func start() {
         autoreleasepool { acquire() }
     }

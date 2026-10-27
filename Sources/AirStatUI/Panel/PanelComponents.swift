@@ -279,3 +279,57 @@ enum PanelAppIcon {
         return String(path[path.startIndex..<range.lowerBound]) + ".app"
     }
 }
+
+// MARK: - Copyable Readout Row
+
+struct CopyableReadoutRow: View {
+    let label: String
+    let value: String
+    @State private var isCopied = false
+
+    init(_ label: String, _ value: String) {
+        self.label = label
+        self.value = value
+    }
+
+    var body: some View {
+        Button(action: copyToClipboard) {
+            HStack(spacing: Design.Space.rowGap) {
+                Text(label)
+                    .font(Design.Text.label)
+                    .foregroundStyle(Design.Palette.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: Design.Space.m)
+                HStack(spacing: Design.Space.xs) {
+                    if isCopied {
+                        Image(systemName: "checkmark")
+                            .font(Design.Text.micro)
+                            .foregroundStyle(Color.green)
+                        Text("Copied")
+                            .font(Design.Text.caption)
+                            .foregroundStyle(Color.green)
+                    } else {
+                        Text(value)
+                            .font(Design.Text.value)
+                            .foregroundStyle(Design.Palette.primaryText)
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(label), \(value)")
+        .accessibilityHint("Click to copy")
+    }
+
+    private func copyToClipboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
+        withAnimation(.easeInOut(duration: 0.15)) { isCopied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeInOut(duration: 0.15)) { isCopied = false }
+        }
+    }
+}

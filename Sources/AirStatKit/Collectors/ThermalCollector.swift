@@ -185,6 +185,13 @@ public final class ThermalCollector: MetricSource {
         var readFailures = 0
 
         for sensor in sensors {
+            // When only serving the menu bar, only CPU die sensors are needed for the
+            // cpuTemperature readout. Skipping GPU, enclosure, battery, storage and
+            // memory sensors cuts SMC coprocessor round trips by over 50%.
+            if context.activity == .menuBar && sensor.category != .cpu {
+                continue
+            }
+
             guard let raw = read(key: sensor.key, dataSize: sensor.dataSize, dataType: sensor.dataType) else {
                 readFailures += 1
                 continue

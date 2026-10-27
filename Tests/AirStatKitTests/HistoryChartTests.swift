@@ -200,6 +200,12 @@ struct HistoryAxisTests {
         #expect(HistoryRange.label(forSpan: 1_800) == "30m")
         #expect(HistoryRange.label(forSpan: 3_600) == "1h")
         #expect(HistoryRange.label(forSpan: 86_400) == "24h")
+
+        #expect(HistoryRange.recent.label(historyDuration: 300) == "5 min (Recent)")
+        #expect(HistoryRange.recent.label(historyDuration: 60) == "1m (Recent)")
+        #expect(HistoryRange.hour.label() == "1h (1 Hour)")
+        #expect(HistoryRange.day.label() == "24h (24 Hours)")
+        #expect(HistoryRange.month.label() == "30d (30 Days)")
     }
 
     @Test("every module with a chart has a series the tier records")

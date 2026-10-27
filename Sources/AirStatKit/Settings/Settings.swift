@@ -168,6 +168,7 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
 public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
     case text
     case graph
+    case miniGraph
     case textAndGraph
     case iconAndText
     case battery
@@ -179,12 +180,13 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
 
     /// The styles any numeric readout can take. The indicator styles are left out
     /// because each draws one kind of metric and nothing else.
-    public static let general: [MenuBarDisplayStyle] = [.text, .graph, .textAndGraph, .iconAndText]
+    public static let general: [MenuBarDisplayStyle] = [.text, .graph, .miniGraph, .textAndGraph, .iconAndText]
 
     public var label: String {
         switch self {
         case .text: return "Text"
         case .graph: return "Graph"
+        case .miniGraph: return "Mini Graph"
         case .textAndGraph: return "Text & Graph"
         case .iconAndText: return "Icon & Text"
         case .battery: return "Battery Indicator"
@@ -202,9 +204,14 @@ public enum MenuBarDisplayStyle: String, Sendable, Codable, CaseIterable, Equata
     /// would be a third.
     public var supportsCaption: Bool {
         switch self {
-        case .text, .graph, .textAndGraph, .bar: return true
+        case .text, .graph, .miniGraph, .textAndGraph, .bar: return true
         case .iconAndText, .battery, .statusDot, .stackedPair: return false
         }
+    }
+
+    /// Whether this style draws a historical graph series.
+    public var showsGraph: Bool {
+        self == .graph || self == .miniGraph || self == .textAndGraph
     }
 }
 
@@ -381,6 +388,10 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var collapsedModules: Set<PanelModule>
     /// Draw the history chart under an expanded module's rows.
     public var showsHistoryChart: Bool
+    /// The default range when opening a history chart in the panel.
+    public var defaultHistoryRange: HistoryRange
+    /// Highlight warning and critical metrics with orange and red tint in the panel.
+    public var showsAlertColors: Bool
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -391,9 +402,13 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public static let processSortKey: ProcessSortKey = .cpu
 
     public init(collapsedModules: Set<PanelModule> = PanelSettings.defaultCollapsed,
-                showsHistoryChart: Bool = true) {
+                showsHistoryChart: Bool = true,
+                defaultHistoryRange: HistoryRange = .day,
+                showsAlertColors: Bool = true) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
+        self.defaultHistoryRange = defaultHistoryRange
+        self.showsAlertColors = showsAlertColors
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -440,7 +455,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var visibleModules: [PanelModule] { PanelModule.allCases }
 
     private enum CodingKeys: String, CodingKey {
-        case collapsedModules, showsHistoryChart
+        case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -450,6 +465,66 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         collapsedModules = Self.accordion(c.value(.collapsedModules, or: PanelSettings.defaultCollapsed))
         showsHistoryChart = c.value(.showsHistoryChart, or: true)
+        defaultHistoryRange = c.value(.defaultHistoryRange, or: .day)
+        showsAlertColors = c.value(.showsAlertColors, or: true)
+    }
+}
+
+// MARK: - History Range
+
+/// Which window a history chart is showing.
+///
+/// Fixed ranges: the first is whatever "Keep history for" is set to (e.g. 5m);
+/// the rest are the spans the bucket tiers keep — an hour of the day's minutes,
+/// the day itself (24h), and the month of hours (30d).
+public enum HistoryRange: String, Sendable, Codable, CaseIterable, Equatable, Hashable {
+    case recent
+    case hour
+    case day
+    case month
+
+    /// "5m", "1h", "24h": short enough for a segment control in a chart footer.
+    public static func label(forSpan span: TimeInterval) -> String {
+        if span < 60 { return "\(Int(span.rounded()))s" }
+        if span < 3_600 { return "\(Int((span / 60).rounded()))m" }
+        let hours = span / 3_600
+        return hours == hours.rounded() ? "\(Int(hours))h" : String(format: "%.1fh", hours)
+    }
+
+    /// Display label for settings pickers: e.g. "5 min (Recent)", "1h (1 Hour)", etc.
+    public func label(historyDuration: TimeInterval = 300) -> String {
+        switch self {
+        case .recent:
+            let span = HistoryRange.label(forSpan: historyDuration)
+            let spanLabel = span == "5m" ? "5 min" : span
+            return "\(spanLabel) (Recent)"
+        case .hour:
+            return "1h (1 Hour)"
+        case .day:
+            return "24h (24 Hours)"
+        case .month:
+            return "30d (30 Days)"
+        }
+    }
+
+    /// What an empty plot says it is still gathering.
+    public var collectingText: String {
+        switch self {
+        case .day: return "Collecting the day…"
+        case .month: return "Collecting the month…"
+        case .recent, .hour: return "Collecting samples…"
+        }
+    }
+
+    /// The span words the spoken summary uses, or nil to fall back to a measured
+    /// "last N" caption: only the bucket windows whose span is exact get a name.
+    public var summaryWindow: String? {
+        switch self {
+        case .hour: return "the last hour"
+        case .day: return "the last 24 hours"
+        case .month: return "the last 30 days"
+        case .recent: return nil
+        }
     }
 }
 

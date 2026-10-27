@@ -61,8 +61,9 @@ public struct HistoryChart: View {
     private let lineTint: Color
     private let bandTint: Color
     private let height: CGFloat
-    /// Nil until the user picks: the chart opens on the day once there is an hour
-    /// of it, and on the live span before that, so it never opens on a lone dot.
+    private let defaultRange: HistoryRange
+    /// Nil until the user picks: the chart opens on the default range once there is
+    /// enough data, and on the live span before that, so it never opens on a lone dot.
     @Binding private var range: HistoryRange?
 
     @State private var scrub: Scrub?
@@ -81,6 +82,7 @@ public struct HistoryChart: View {
                 tint: Color,
                 band: Color,
                 height: CGFloat = Design.Chart.detailHeight,
+                defaultRange: HistoryRange = .day,
                 range: Binding<HistoryRange?>) {
         self.module = module
         self.history = history
@@ -90,6 +92,7 @@ public struct HistoryChart: View {
         self.lineTint = tint
         self.bandTint = band
         self.height = height
+        self.defaultRange = defaultRange
         self._range = range
     }
 
@@ -226,7 +229,17 @@ public struct HistoryChart: View {
     static let boundLabelBand = 0.85
 
     private var resolvedRange: HistoryRange {
-        range ?? (day.collectedSpan(of: module.key) >= Self.dayDefaultThreshold ? .day : .recent)
+        if let range { return range }
+        switch defaultRange {
+        case .recent:
+            return .recent
+        case .hour:
+            return day.collectedSpan(of: module.key) >= 60 ? .hour : .recent
+        case .day:
+            return day.collectedSpan(of: module.key) >= Self.dayDefaultThreshold ? .day : .recent
+        case .month:
+            return month.collectedSpan(of: module.key) >= 3_600 ? .month : .recent
+        }
     }
 
     private var window: Window {

@@ -151,6 +151,11 @@ public final class MetricsEngine {
         updateActivity()
     }
 
+    /// Triggers an immediate network latency probe.
+    public func triggerLatencyProbe() {
+        core?.triggerLatencyProbe()
+    }
+
     public func setDesktopWidgetVisible(_ visible: Bool) {
         guard visible != isDesktopWidgetVisible else { return }
         isDesktopWidgetVisible = visible
@@ -378,19 +383,22 @@ public final class MetricsEngine {
 
     /// Fold a snapshot into history. Only series whose metric is actually available
     /// are appended — a missing sensor leaves a gap rather than a fabricated zero.
-    /// Writes the tiers off the main actor. A tier is a value, so the copy handed
-    /// to the task is the state being saved and later samples cannot race it.
+    /// Writes the tiers off the main actor at background priority. A tier is a value,
+    /// so the copy handed to the task is the state being saved and later samples cannot
+    /// race it. Grouping all saves into one background task reduces disk/SSD wakeups.
     private func saveHistories() {
         let day = dayHistory
         let dayFile = dayHistoryFile
-        dayHistorySavedMinute = day.newestBucket
-        Task.detached(priority: .utility) { dayFile.save(day) }
         let month = monthHistory
         let monthFile = monthHistoryFile
-        Task.detached(priority: .utility) { monthFile.save(month) }
         let usage = networkUsage
         let usageFile = usageFile
-        Task.detached(priority: .utility) { usageFile.save(usage) }
+        dayHistorySavedMinute = day.newestBucket
+        Task.detached(priority: .background) {
+            dayFile.save(day)
+            monthFile.save(month)
+            usageFile.save(usage)
+        }
     }
 
     private func record(_ s: SystemSnapshot) {

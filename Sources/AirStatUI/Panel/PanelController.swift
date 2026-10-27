@@ -128,6 +128,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
         disclosureDeadline = nil
         layout?.isDisclosureTransitionActive = false
         layout?.collapsedModulesOverride = nil
+        layout?.focusedModule = nil
         layout?.disclosureOrigin = nil
         NSAnimationContext.runAnimationGroup { context in
             context.duration = motionDuration * 0.7
@@ -534,9 +535,23 @@ public final class PanelController: NSObject, NSWindowDelegate {
         // when the app is already trusted for accessibility — this never prompts for a
         // permission.
         if let escape = NSEvent.addLocalMonitorForEvents(matching: [.keyDown], handler: { [weak self] event in
-            guard event.keyCode == Self.escapeKeyCode else { return event }
-            Task { @MainActor in self?.hide() }
-            return nil
+            guard let self else { return event }
+            switch event.keyCode {
+            case Self.escapeKeyCode:
+                Task { @MainActor in self.hide() }
+                return nil
+            case 126: // Up Arrow
+                Task { @MainActor in self.moveFocus(delta: -1) }
+                return nil
+            case 125: // Down Arrow
+                Task { @MainActor in self.moveFocus(delta: 1) }
+                return nil
+            case 36, 49: // Return or Space
+                Task { @MainActor in self.toggleFocusedModule() }
+                return nil
+            default:
+                return event
+            }
         }) {
             monitors.append(escape)
         }
@@ -568,6 +583,22 @@ public final class PanelController: NSObject, NSWindowDelegate {
         })
 
         WindowLog.log("panel monitors installed count=\(activeEventMonitorCount)")
+    }
+
+    private func moveFocus(delta: Int) {
+        let visible = settings.settings.panel.visibleModules
+        guard !visible.isEmpty else { return }
+        guard let current = layout?.focusedModule, let index = visible.firstIndex(of: current) else {
+            layout?.focusedModule = delta > 0 ? visible.first : visible.last
+            return
+        }
+        let nextIndex = min(max(index + delta, 0), visible.count - 1)
+        layout?.focusedModule = visible[nextIndex]
+    }
+
+    private func toggleFocusedModule() {
+        guard let focused = layout?.focusedModule else { return }
+        toggleModule(focused)
     }
 
     private func removeDismissMonitors() {

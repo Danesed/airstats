@@ -42,6 +42,7 @@ public final class MenuBarContentView: NSView {
         /// Matches the leading/trailing inset AppKit gives a standard status item.
         static let horizontalInset = Design.MenuBar.horizontalInset
         static let graphWidth = Design.MenuBar.graphWidth
+        static let miniGraphWidth: CGFloat = 16
         static let graphHeight = Design.MenuBar.graphHeight
         /// One separator inside a readout — between an icon and its number, a graph and
         /// its number, a caption and what it captions. Four gaps in a deliberate ladder
@@ -333,7 +334,9 @@ public final class MenuBarContentView: NSView {
         }
 
         if let symbol { geometry.symbol = ceil(symbol.template.size.width) }
-        if hasGraph(item) { geometry.graph = Layout.graphWidth }
+        if hasGraph(item) {
+            geometry.graph = item.style == .miniGraph ? Layout.miniGraphWidth : Layout.graphWidth
+        }
 
         guard item.style.drawsValue else { return geometry }
 
@@ -375,7 +378,7 @@ public final class MenuBarContentView: NSView {
     /// Two samples is the least that can describe a change. Below that there is nothing
     /// to plot, and the honest thing is to draw nothing at all.
     private func hasGraph(_ item: MenuBarItemRender) -> Bool {
-        guard item.style == .graph || item.style == .textAndGraph else { return false }
+        guard item.style.showsGraph else { return false }
         return item.primary.series.count > 1 || (item.secondary?.series.count ?? 0) > 1
     }
 
@@ -1342,7 +1345,7 @@ private extension MenuBarDisplayStyle {
     var drawsValue: Bool {
         switch self {
         case .text, .textAndGraph, .iconAndText, .stackedPair: return true
-        case .graph, .battery, .statusDot, .bar: return false
+        case .graph, .miniGraph, .battery, .statusDot, .bar: return false
         }
     }
 }

@@ -176,4 +176,17 @@ struct MenuBarNormalizationTests {
         #expect(drawn(.fanSpeed, history).0.series.isEmpty)
         #expect(reference(history, .fanRPM).isEmpty)
     }
+
+    @Test("non-graph styles omit the series array to allow skipping unnecessary redraws")
+    func nonGraphStylesOmitSeries() {
+        var hist = MetricHistory(capacity: 64, sampleInterval: 2)
+        for i in 0..<10 { hist.record(.cpuTotal, Double(i) * 0.1) }
+        var settings = Settings()
+        settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage, style: .text)]
+        let model = MenuBarRenderModel(snapshot: SnapshotFixtures.nominal,
+                                       history: hist,
+                                       settings: settings,
+                                       isStale: false)
+        #expect(model.items[0].primary.series.isEmpty)
+    }
 }

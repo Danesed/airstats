@@ -1,4 +1,5 @@
 import SwiftUI
+import Darwin
 import AirStatKit
 
 /// The second-look content of every module.
@@ -40,6 +41,7 @@ extension PanelModuleView {
                          settings: settings.settings.charts,
                          tint: chartTint,
                          band: bandTint,
+                         defaultRange: settings.settings.panel.defaultHistoryRange,
                          range: $historyRange)
 
                 .padding(.top, Design.Space.s)
@@ -228,7 +230,7 @@ extension PanelModuleView {
                 // alone, it would sit in the left column and the address would
                 // end mid-panel instead of on the right edge like the public one.
                 if let ip = network.localIPv4 {
-                    ReadoutRow("Local IP", ip)
+                    CopyableReadoutRow("Local IP", ip)
                 } else if let name = network.primaryInterfaceName {
                     ReadoutRow("Interface", name)
                 }
@@ -236,27 +238,46 @@ extension PanelModuleView {
                     // Full width rather than a grid cell, the way the battery's adapter
                     // row is: a grid cell is half of 340pt and truncated "203.0.113…"
                     // after the label, and an IPv6 answer is three times longer again.
-                    ReadoutRow("Public IP", publicIP)
+                    CopyableReadoutRow("Public IP", publicIP)
                 }
                 if let router = network.routerIPv4 {
-                    ReadoutRow("Router", router)
+                    CopyableReadoutRow("Router", router)
                 }
                 if !network.dnsServers.isEmpty {
                     ReadoutRow("DNS", network.dnsServers.joined(separator: " · "))
                 }
                 if let latency = latencyValue(network.latency, loss: network.packetLoss) {
-                    ReadoutRow("Latency", latency)
+                    HStack(spacing: Design.Space.rowGap) {
+                        Text("Latency")
+                            .font(Design.Text.label)
+                            .foregroundStyle(Design.Palette.secondaryText)
+                            .lineLimit(1)
+                        Spacer(minLength: Design.Space.m)
+                        Text(latency)
+                            .font(Design.Text.value)
+                            .foregroundStyle(Design.Palette.primaryText)
+                            .lineLimit(1)
+                        Button {
+                            engine.triggerLatencyProbe()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(Design.Text.micro)
+                                .foregroundStyle(Design.Palette.secondaryText)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Retest latency")
+                    }
                 }
                 if let primary = network.interfaces.first(where: { $0.name == network.primaryInterfaceName }) {
                     if let ip6 = primary.ipv6 {
-                        ReadoutRow("Local IPv6", ip6)
+                        CopyableReadoutRow("Local IPv6", ip6)
                     }
                     if let mac = primary.macAddress {
                         let private_ = primary.factoryMacAddress != nil
                             && primary.factoryMacAddress != mac
-                        ReadoutRow("MAC", private_ ? "\(mac) · private" : mac)
+                        CopyableReadoutRow("MAC", private_ ? "\(mac) · private" : mac)
                         if private_, let factory = primary.factoryMacAddress {
-                            ReadoutRow("Factory MAC", factory)
+                            CopyableReadoutRow("Factory MAC", factory)
                         }
                     }
                 }
@@ -578,6 +599,25 @@ extension PanelModuleView {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(process.name)
         .accessibilityValue(value)
+        .contextMenu {
+            Button(role: .destructive) {
+                kill(process.pid, SIGTERM)
+            } label: {
+                Label("Quit Process (\(process.name))", systemImage: "xmark.circle")
+            }
+            Button(role: .destructive) {
+                kill(process.pid, SIGKILL)
+            } label: {
+                Label("Force Quit (SIGKILL)", systemImage: "bolt.circle")
+            }
+            Divider()
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString("\(process.pid)", forType: .string)
+            } label: {
+                Label("Copy PID (\(process.pid))", systemImage: "doc.on.doc")
+            }
+        }
     }
 
     /// A real icon for anything with a bundle, a symbol for everything else.

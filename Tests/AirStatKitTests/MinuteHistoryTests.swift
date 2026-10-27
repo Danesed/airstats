@@ -182,6 +182,7 @@ struct HistoryChartSettingsTests {
     func decodesDefaults() throws {
         let panel = try JSONDecoder().decode(PanelSettings.self, from: Data("{}".utf8))
         #expect(panel.showsHistoryChart == true)
+        #expect(panel.defaultHistoryRange == .day)
         let widget = try JSONDecoder().decode(DesktopWidgetSettings.self, from: Data("{}".utf8))
         #expect(widget.showsHistoryChart == false)
     }
@@ -190,8 +191,10 @@ struct HistoryChartSettingsTests {
     func roundTrip() throws {
         var panel = PanelSettings()
         panel.showsHistoryChart = false
+        panel.defaultHistoryRange = .hour
         let decodedPanel = try JSONDecoder().decode(PanelSettings.self, from: JSONEncoder().encode(panel))
         #expect(decodedPanel.showsHistoryChart == false)
+        #expect(decodedPanel.defaultHistoryRange == .hour)
 
         var widget = DesktopWidgetSettings()
         widget.showsHistoryChart = true

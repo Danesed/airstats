@@ -270,6 +270,12 @@ public final class SamplingCore: @unchecked Sendable {
         }
     }
 
+    public func triggerLatencyProbe() {
+        queue.async { [self] in
+            networkSlot.source.triggerLatencyProbe()
+        }
+    }
+
     /// Called on wake from sleep: cumulative counters may have reset and every
     /// rate is meaningless until re-baselined.
     public func noteWakeFromSleep() {
@@ -353,13 +359,21 @@ public final class SamplingCore: @unchecked Sendable {
 
         var changed = false
         func run<S: MetricSource>(_ slot: SourceSlot<S>) {
+            var multiplier = thermalMultiplier(for: slot.identifier)
+            // Processes are expensive. While the panel is open on an idle machine (< 6% CPU),
+            // double the process cadence to avoid spending cycles re-enumerating idle PIDs.
+            if slot.identifier == .processes, activity >= .panel {
+                if let busy = cpuSlot.state.value?.total.busy, busy < 0.06 {
+                    multiplier *= 2.0
+                }
+            }
             if slot.tick(now: now,
                          activity: activity,
                          isEnabled: enabledSources.contains(slot.identifier),
                          baseInterval: baseInterval,
                          didWakeFromSleep: didWake,
                          force: force,
-                         thermalCadenceMultiplier: thermalMultiplier(for: slot.identifier)) {
+                         thermalCadenceMultiplier: multiplier) {
                 changed = true
             }
         }

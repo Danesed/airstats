@@ -289,7 +289,9 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             // Down and up share one scale so the two stacked graphs are comparable;
             // normalising each to its own peak would make a trickle of upload look
             // identical to a saturated link.
-            let pair = jointlyNormalized(history, .networkDownload, .networkUpload)
+            let pair = config.style.showsGraph
+                ? jointlyNormalized(history, .networkDownload, .networkUpload)
+                : ([Float](), [Float]())
             // The stacked style angles its arrows to the diagonal; the one-line
             // styles keep the vertical pair they have always drawn.
             let stacked = config.style == .stackedPair
@@ -329,7 +331,9 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 accessibilityValue = "Disk read \(formatter.diskRate(disk.readBytesPerSecond)), "
                     + "write \(formatter.diskRate(disk.writeBytesPerSecond))"
             }
-            let pair = jointlyNormalized(history, .diskRead, .diskWrite)
+            let pair = config.style.showsGraph
+                ? jointlyNormalized(history, .diskRead, .diskWrite)
+                : ([Float](), [Float]())
             secondary = MenuBarLine(glyph: "W", valueText: writeText,
                                     widestText: rateWidest, series: pair.1)
             return finish(config: config, caption: nil,
@@ -433,7 +437,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             }
         }
 
-        let series = seriesKey.map { normalizedSeries(history, key: $0) } ?? []
+        let series = (config.style.showsGraph ? seriesKey.map { normalizedSeries(history, key: $0) } : nil) ?? []
         return finish(config: config, caption: caption(for: config),
                       primary: MenuBarLine(valueText: valueText, widestText: widest,
                                            series: series),

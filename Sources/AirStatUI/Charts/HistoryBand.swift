@@ -1,47 +1,6 @@
 import SwiftUI
 import AirStatKit
 
-/// Which window a history chart is showing.
-///
-/// Fixed ranges and no picker: the first is whatever "Keep history for" already is,
-/// so the chart footer never grows a second retention control next to the one in
-/// Settings; the rest are the spans the bucket tiers keep — an hour of the day's
-/// minutes, the day itself, and the month of hours.
-public enum HistoryRange: Equatable, Sendable, CaseIterable {
-    case recent
-    case hour
-    case day
-    case month
-
-    /// "5m", "1h", "24h": short enough for a segment control in a chart footer.
-    public static func label(forSpan span: TimeInterval) -> String {
-        if span < 60 { return "\(Int(span.rounded()))s" }
-        if span < 3_600 { return "\(Int((span / 60).rounded()))m" }
-        let hours = span / 3_600
-        return hours == hours.rounded() ? "\(Int(hours))h" : String(format: "%.1fh", hours)
-    }
-
-    /// What an empty plot says it is still gathering.
-    var collectingText: String {
-        switch self {
-        case .day: return "Collecting the day…"
-        case .month: return "Collecting the month…"
-        case .recent, .hour: return "Collecting samples…"
-        }
-    }
-
-    /// The span words the spoken summary uses, or nil to fall back to a measured
-    /// "last N" caption: only the bucket windows whose span is exact get a name.
-    var summaryWindow: String? {
-        switch self {
-        case .hour: return "the last hour"
-        case .day: return "the last 24 hours"
-        case .month: return "the last 30 days"
-        case .recent: return nil
-        }
-    }
-}
-
 /// One drawable column of a history plot: the extremes and the mean of whatever fell
 /// in it.
 struct BandColumn: Equatable {

@@ -73,6 +73,15 @@ struct AppearancePane: View {
             }
 
             Section {
+                Toggle("Highlight warnings in orange and red",
+                       isOn: settings.binding(\.panel.showsAlertColors))
+            } header: {
+                Text("Alert Warnings")
+            } footer: {
+                SettingsFootnote("Tints readings orange or red in the panel when CPU, memory, pressure, temperature, battery or disk reach warning or critical levels.")
+            }
+
+            Section {
                 Picker("Chart style", selection: settings.binding(\.charts.style)) {
                     ForEach(ChartStyle.allCases, id: \.self) { style in
                         Text(style.label).tag(style)
@@ -83,10 +92,18 @@ struct AppearancePane: View {
                         Text(SettingsLabels.duration(duration)).tag(duration)
                     }
                 }
-                Toggle("Show a 24-hour history in the panel",
+                Toggle("Show history in the panel",
                        isOn: settings.binding(\.panel.showsHistoryChart))
+                Picker("Default range", selection: settings.binding(\.panel.defaultHistoryRange)) {
+                    ForEach(HistoryRange.allCases, id: \.self) { range in
+                        Text(range.label(historyDuration: settings.settings.charts.historyDuration)).tag(range)
+                    }
+                }
+                .disabled(!settings.settings.panel.showsHistoryChart)
             } header: {
                 Text("Charts")
+            } footer: {
+                SettingsFootnote("Choose whether history charts are shown when expanding panel modules, and which time range (5 min, 1h, 24h, 30d) opens by default.")
             }
 
         }

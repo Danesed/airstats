@@ -80,6 +80,24 @@ public final class LatencyProbe: @unchecked Sendable {
         }
     }
 
+    /// Triggers an immediate probe on demand, resetting the throttle timer.
+    public func triggerProbe() {
+        lock.lock()
+        guard isEnabled, !isFetching else {
+            lock.unlock()
+            return
+        }
+        isFetching = true
+        lastAttempt = Monotonic.now
+        let generation = self.generation
+        state = .pending
+        lock.unlock()
+
+        transport { [weak self] result in
+            self?.finish(result, generation: generation)
+        }
+    }
+
     private func finish(_ result: MetricState<TimeInterval>, generation: UInt64) {
         lock.lock()
         defer { lock.unlock() }
