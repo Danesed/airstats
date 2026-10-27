@@ -821,14 +821,21 @@ public final class MenuBarContentView: NSView {
                                scale: CGFloat, context: CGContext) {
         let cap = fonts[.sideLabel].capHeight
         let column = sideLabelWidth(text)
-        let pitch = cap + Layout.sideLabelRowGap
-        let top = bounds.midY + barHeight / 2
+        // Centred on the bar's own midline, not hung from the top of `barHeight`: that
+        // height is rounded up, so hanging the stack from it left all of the rounding
+        // underneath and the letters sat visibly high beside the pill. The pitch is
+        // whole device pixels so every row lands the same distance from the next;
+        // snapping each baseline on its own made the gaps alternate by a pixel.
+        let pitch = max(((cap + Layout.sideLabelRowGap) * scale).rounded(), 1) / scale
+        let rows = CGFloat(text.count)
+        let stack = cap + (rows - 1) * pitch
+        let bottom = snap(bounds.midY - stack / 2, scale)
         for (row, letter) in text.enumerated() {
             let glyph = String(letter)
             let glyphWidth = width(glyph, role: .sideLabel)
             drawText(glyph, role: .sideLabel,
                      x: x + (column - glyphWidth) / 2,
-                     baseline: top - cap - CGFloat(row) * pitch,
+                     baseline: bottom + (rows - 1 - CGFloat(row)) * pitch,
                      color: color, scale: scale, context: context)
         }
     }
