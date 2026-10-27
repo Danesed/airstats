@@ -193,7 +193,7 @@ public enum Design {
         public static let sideLabelFontSize: CGFloat = 7
         /// Vertical gap between the two rows, between their cap-height boxes rather
         /// than their line boxes.
-        public static let stackedRowGap: CGFloat = 1
+        public static let stackedRowGap: CGFloat = 2.5
         public static let graphWidth: CGFloat = 34
         public static let graphHeight: CGFloat = 11
         public static let horizontalInset: CGFloat = 3
