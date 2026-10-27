@@ -69,19 +69,40 @@ struct PanelModuleView: View {
     /// nothing sits on top of it — so it takes the colour text takes.
     static let barTint = Design.Palette.primaryText
 
-    var tint: Color { Self.barTint }
+    var metricColor: Color {
+        if let custom = settings.settings.theme.color(for: module.requiredSource) {
+            return Color(themeColor: custom)
+        }
+        return Design.Palette.defaultMetric(module.requiredSource)
+    }
+
+    var tint: Color {
+        if settings.settings.panel.showsAlertColors && alertLevel != .none {
+            return alertLevel == .critical ? Color.red : Color.orange
+        }
+        return metricColor
+    }
+
+    var barTint: Color { tint }
 
     /// The history chart stays a step quieter than the bars: a stroked line reads at
     /// secondary weight where a filled bar does not.
-    var chartTint: Color { Design.Palette.secondaryText }
+    var chartTint: Color { tint }
 
-    /// The low-to-high band of the history chart, under its mean line. Fainter than
-    /// a bar's fill: it is context for the line, not a reading of its own.
-    var bandTint: Color { Design.Palette.primaryText.opacity(0.10) }
+    /// The low-to-high band of the history chart, under its mean line.
+    var bandTint: Color { tint.opacity(0.15) }
 
-    /// A module glyph is a thin shape beside a heading it does not compete with, so it
-    /// sits at secondary weight — nine icons at full strength is a wall.
-    private var iconColor: Color { Design.Palette.secondaryText }
+    /// A module glyph takes the metric color from Appearance, or alert color when warning/critical.
+    private var iconColor: Color {
+        if settings.settings.panel.showsAlertColors {
+            switch alertLevel {
+            case .critical: return Color.red
+            case .warning: return Color.orange
+            case .none: break
+            }
+        }
+        return metricColor
+    }
 
     /// Reserved width for the process list's value column, sized for the widest
     /// reading it can hold ("412.6%", "4.3 GB") so the column never reflows as
@@ -227,21 +248,32 @@ struct PanelModuleView: View {
     private var alertLevel: ModuleAlertLevel {
         switch module {
         case .cpu:
-            if let busy = engine.cpu.value?.total.busy {
-                if busy >= 0.95 { return .critical }
-                if busy >= 0.80 { return .warning }
+            if let cpu = engine.cpu.value {
+                let busy = cpu.total.busy
+                let cores = Double(ProcessInfo.processInfo.activeProcessorCount)
+                let highLoad = cpu.loadAverage.one >= cores
+                if busy >= 0.90 || (highLoad && busy >= 0.75) { return .critical }
+                if busy >= 0.65 || highLoad { return .warning }
             }
         case .memory:
-            if let fraction = engine.memory.value?.pressureFraction {
-                if fraction >= 0.80 { return .critical }
-                if fraction >= 0.60 { return .warning }
+            if let memory = engine.memory.value {
+                let ramUsed = memory.totalBytes > 0
+                    ? Double(memory.usedBytes) / Double(memory.totalBytes)
+                    : 0
+                if memory.memoryPressure == .critical || memory.pressureFraction >= 0.75 || ramUsed >= 0.90 {
+                    return .critical
+                }
+                if memory.memoryPressure == .warning || memory.pressureFraction >= 0.50 || ramUsed >= 0.75 {
+                    return .warning
+                }
             }
         case .thermal:
             if let thermal = engine.thermal.value {
-                if thermal.pressure == .critical || (thermal.cpuCelsius ?? 0) >= 95 {
+                let temp = thermal.cpuCelsius ?? 0
+                if thermal.pressure == .critical || temp >= 85 {
                     return .critical
                 }
-                if thermal.pressure == .serious || (thermal.cpuCelsius ?? 0) >= 85 {
+                if thermal.pressure == .serious || thermal.pressure == .fair || temp >= 65 {
                     return .warning
                 }
             }
@@ -252,13 +284,13 @@ struct PanelModuleView: View {
             }
         case .disk:
             if let root = engine.disk.value?.rootVolume {
-                if root.usedFraction >= 0.95 { return .critical }
-                if root.usedFraction >= 0.85 { return .warning }
+                if root.usedFraction >= 0.90 { return .critical }
+                if root.usedFraction >= 0.75 { return .warning }
             }
         case .gpu:
             if let util = engine.gpu.value?.primary?.utilization {
-                if util >= 0.95 { return .critical }
-                if util >= 0.80 { return .warning }
+                if util >= 0.90 { return .critical }
+                if util >= 0.70 { return .warning }
             }
         default:
             break

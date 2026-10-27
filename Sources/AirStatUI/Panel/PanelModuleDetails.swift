@@ -127,7 +127,7 @@ extension PanelModuleView {
                 PanelSegmentLegend(segments: segments, format: .memoryBytes)
                 PanelBarRow(label: "Pressure", value: memory.memoryPressure.label,
                             fraction: memory.pressureFraction,
-                            tint: PanelModuleView.barTint)
+                            tint: tint)
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Swap", formatter.memory(memory.swapUsedBytes)),
                     PanelDetailEntry("Total", formatter.memory(memory.totalBytes)),
@@ -404,7 +404,7 @@ extension PanelModuleView {
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
             }
-            CapacityBar(fraction: 1 - remaining, tint: PanelModuleView.barTint)
+            CapacityBar(fraction: 1 - remaining, tint: tint)
         }
         .accessibilityElement(children: .combine)
     }
@@ -415,7 +415,7 @@ extension PanelModuleView {
         section(engine.power) { power in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 if power.hasBattery, let percentage = power.percentage {
-                    CapacityBar(fraction: percentage / 100, tint: PanelModuleView.barTint)
+                    CapacityBar(fraction: percentage / 100, tint: tint)
                 }
                 if let adapter = adapterSummary(power) {
                     ReadoutRow("Adapter", adapter)
@@ -447,7 +447,7 @@ extension PanelModuleView {
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
             }
-            CapacityBar(fraction: accessory.percent / 100, tint: PanelModuleView.barTint)
+            CapacityBar(fraction: accessory.percent / 100, tint: tint)
         }
         .accessibilityElement(children: .combine)
     }
