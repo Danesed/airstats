@@ -814,29 +814,29 @@ public final class MenuBarContentView: NSView {
     }
 
     /// The caption stacked beside a bar, one letter to a row, reading top to bottom
-    /// and each letter centred in the column. Stacked rather than rotated because the
-    /// letters then read the way everything else on the bar does, upright and left to
-    /// right, and the stack is the bar's own height so the two sit as one shape.
+    /// and each letter optically centred on the column's vertical axis.
     private func drawSideLabel(_ text: String, x: CGFloat, color: CGColor,
                                scale: CGFloat, context: CGContext) {
         let cap = fonts[.sideLabel].capHeight
         let column = sideLabelWidth(text)
-        // Centred on the bar's own midline, not hung from the top of `barHeight`: that
-        // height is rounded up, so hanging the stack from it left all of the rounding
-        // underneath and the letters sat visibly high beside the pill. The pitch is
-        // whole device pixels so every row lands the same distance from the next;
-        // snapping each baseline on its own made the gaps alternate by a pixel.
+        let colCenter = snap(x + column / 2, scale)
+        let pillY = snap(bounds.midY - barHeight / 2, scale)
         let pitch = max(((cap + Layout.sideLabelRowGap) * scale).rounded(), 1) / scale
         let rows = CGFloat(text.count)
         let stack = cap + (rows - 1) * pitch
-        let bottom = snap(bounds.midY - stack / 2, scale)
+        let stackInset = (barHeight - stack) / 2
+        let bottomBaseline = snap(pillY + stackInset, scale)
+
+        context.setFillColor(color)
         for (row, letter) in text.enumerated() {
-            let glyph = String(letter)
-            let glyphWidth = width(glyph, role: .sideLabel)
-            drawText(glyph, role: .sideLabel,
-                     x: x + (column - glyphWidth) / 2,
-                     baseline: bottom + (rows - 1 - CGFloat(row)) * pitch,
-                     color: color, scale: scale, context: context)
+            let str = String(letter)
+            guard let cached = cachedText(str, role: .sideLabel) else { continue }
+            // Optical centering: align each letter's visual ink center with the column's centerline.
+            let centerOffset = cached.inkOffset + cached.inkWidth / 2
+            let textX = colCenter - centerOffset
+            let baseline = bottomBaseline + (rows - 1 - CGFloat(row)) * pitch
+            context.textPosition = CGPoint(x: textX, y: snap(baseline, scale))
+            CTLineDraw(cached.line, context)
         }
     }
 
@@ -1165,12 +1165,14 @@ public final class MenuBarContentView: NSView {
             NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
         ])
         let line = CTLineCreateWithAttributedString(attributed)
+        let glyphBounds = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
         let cached = CachedText(
             line: line,
             width: ceil(CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))),
             // Glyph-path bounds rather than image bounds: image bounds need a context,
             // and there is none while laying out.
-            inkOffset: CTLineGetBoundsWithOptions(line, .useGlyphPathBounds).origin.x)
+            inkOffset: glyphBounds.origin.x,
+            inkWidth: glyphBounds.width)
         textCache[key] = cached
         return cached
     }
@@ -1353,6 +1355,8 @@ public final class MenuBarContentView: NSView {
         let width: CGFloat
         /// Distance from the typographic origin to the first inked pixel.
         let inkOffset: CGFloat
+        /// Width of the inked glyph path.
+        let inkWidth: CGFloat
     }
 }
 
