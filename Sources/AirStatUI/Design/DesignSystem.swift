@@ -97,20 +97,12 @@ public enum Design {
             return defaultMetric(id)
         }
 
-        /// What `metric` returns with no override in place. Public so the colour
-        /// editor can show what "Default" means and reset back to it.
+        /// What `metric` returns with no override in place. Pure white (#FFFFFF) in dark mode,
+        /// and dark label color in light mode.
         public static func defaultMetric(_ id: CollectorID) -> Color {
-            switch id {
-            case .cpu: return Color(nsColor: .systemBlue)
-            case .memory: return Color(nsColor: .systemGreen)
-            case .gpu: return Color(nsColor: .systemPurple)
-            case .network: return Color(nsColor: .systemTeal)
-            case .disk: return Color(nsColor: .systemIndigo)
-            case .power: return Color(nsColor: .systemGreen)
-            case .thermal: return Color(nsColor: .systemOrange)
-            case .processes: return Color(nsColor: .systemGray)
-            case .system: return Color(nsColor: .systemGray)
-            }
+            Color(nsColor: NSColor(name: nil) { appearance in
+                appearance.isDark ? NSColor.white : NSColor(white: 0.15, alpha: 1.0)
+            })
         }
 
         /// Track behind bars, rings and gauges.
