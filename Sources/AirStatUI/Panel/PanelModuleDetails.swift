@@ -673,12 +673,8 @@ extension PanelModuleView {
         section(engine.system) { system in
             VStack(alignment: .leading, spacing: Design.Space.xxs) {
                 ReadoutRow("Model", system.modelName)
-                PanelDetailGrid(entries: [
-                    PanelDetailEntry("Chip", system.chipName),
-                    PanelDetailEntry(system.osName, system.osVersion),
-                ])
-                // Full width like the model row: "3024 × 1964 · 120 Hz · 2 displays"
-                // does not fit half a grid cell.
+                ReadoutRow("Chip", system.chipName)
+                ReadoutRow(system.osName, system.osVersion)
                 if let display = system.displaySummary {
                     ReadoutRow("Display", display)
                 }

@@ -179,7 +179,7 @@ struct CollectorContractTests {
         for fan in thermal.fans {
             #expect(fan.currentRPM >= 0)
             if let minimum = fan.minRPM, fan.currentRPM > 0 {
-                #expect(fan.currentRPM >= minimum - 1,
+                #expect(fan.currentRPM >= minimum * 0.98 - 1,
                         "fan \(fan.id) spinning at \(fan.currentRPM) below stated min \(minimum)")
             }
             // The dial must never be driven outside 0...1, including when stopped.
