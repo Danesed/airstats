@@ -115,6 +115,9 @@ struct PanelModuleView: View {
             detail
                 .padding(.horizontal, Design.Space.panelInset)
                 .padding(.top, Design.Space.xxs)
+                // Air before the rule that closes an expanded module, so its last row
+                // does not sit on the separator.
+                .padding(.bottom, isExpanded ? Design.Space.xs : 0)
         }
         .padding(.vertical, Design.Space.xxs)
         .environment(\.metricFormatter, formatter)
@@ -131,8 +134,11 @@ struct PanelModuleView: View {
                     .foregroundStyle(Design.Palette.tertiaryText)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
                     .frame(width: Design.Space.m)
+                // Regular weight, not the label's semibold: the glyph identifies the
+                // row, and at the heading's weight nine of them read as a second
+                // column of content.
                 Image(systemName: summary.icon ?? module.symbolName)
-                    .font(Design.Text.sectionHeader)
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(iconColor)
                     .frame(width: Design.Space.xl)
                 Text(module.label)

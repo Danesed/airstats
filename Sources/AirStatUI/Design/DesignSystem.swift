@@ -97,11 +97,12 @@ public enum Design {
             return defaultMetric(id)
         }
 
-        /// What `metric` returns with no override in place. Pure white (#FFFFFF) in dark mode,
-        /// and dark label color in light mode.
+        /// What `metric` returns with no override in place: a step under the label
+        /// colour in each appearance. Near-black bars in light mode outweighed the
+        /// numbers they sit under; the text should be the darkest ink in the panel.
         public static func defaultMetric(_ id: CollectorID) -> Color {
             Color(nsColor: NSColor(name: nil) { appearance in
-                appearance.isDark ? NSColor.white : NSColor(white: 0.15, alpha: 1.0)
+                appearance.isDark ? NSColor(white: 0.92, alpha: 1.0) : NSColor(white: 0.3, alpha: 1.0)
             })
         }
 
@@ -266,7 +267,7 @@ public struct CapacityBar: View {
     private let tint: Color
     private let height: CGFloat
 
-    public init(fraction: Double, tint: Color, height: CGFloat = 5) {
+    public init(fraction: Double, tint: Color, height: CGFloat = 4) {
         self.fraction = min(max(fraction, 0), 1)
         self.tint = tint
         self.height = height
