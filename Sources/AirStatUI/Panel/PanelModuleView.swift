@@ -212,12 +212,17 @@ struct PanelModuleView: View {
                 // has a caption, which puts every number's right edge on the same line.
                 // When no row has one there is no column at all.
                 if captionColumnWidth > 0 {
-                    Text(summary.caption ?? "")
-                        .font(Design.Text.caption)
-                        .foregroundStyle(Design.Palette.tertiaryText)
-                        .lineLimit(1)
-                        .frame(width: captionColumnWidth, alignment: .leading)
-                        .accessibilityHidden(summary.caption == nil)
+                    if let caption = summary.caption, !caption.isEmpty {
+                        Text(caption)
+                            .font(Design.Text.caption)
+                            .foregroundStyle(Design.Palette.tertiaryText)
+                            .lineLimit(1)
+                            .frame(width: captionColumnWidth, alignment: .leading)
+                    } else if summary.leadValue == nil {
+                        Color.clear
+                            .frame(width: captionColumnWidth, height: 1)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
         }
@@ -389,10 +394,6 @@ extension PanelSummary {
                                 reservedValueText: device.name)
         case .network:
             guard let network = engine.network.value else { return warmup(for: engine.network) }
-            // The paired headline is already the widest in the panel; even a short
-            // SSID here widens the shared caption column enough to squeeze this
-            // row's own label into an ellipsis. The connection kind only reports
-            // when there is no Wi-Fi row below to carry the network's name.
             return PanelSummary(value: formatter.networkRate(network.downloadBytesPerSecond),
                                 caption: network.wifi == nil ? network.connectionType.label : nil,
                                 symbol: "arrow.down.left",
