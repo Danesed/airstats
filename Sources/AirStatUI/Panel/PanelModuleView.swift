@@ -257,13 +257,11 @@ struct PanelModuleView: View {
             }
         case .memory:
             if let memory = engine.memory.value {
-                let ramUsed = memory.totalBytes > 0
-                    ? Double(memory.usedBytes) / Double(memory.totalBytes)
-                    : 0
-                if memory.memoryPressure == .critical || memory.pressureFraction >= 0.75 || ramUsed >= 0.90 {
+                let ramUsed = memory.usedFraction
+                if memory.memoryPressure == .critical || memory.pressureFraction >= 0.80 || ramUsed >= 0.95 {
                     return .critical
                 }
-                if memory.memoryPressure == .warning || memory.pressureFraction >= 0.50 || ramUsed >= 0.75 {
+                if memory.memoryPressure == .warning || memory.pressureFraction >= 0.65 || ramUsed >= 0.88 {
                     return .warning
                 }
             }
@@ -288,9 +286,13 @@ struct PanelModuleView: View {
                 if root.usedFraction >= 0.75 { return .warning }
             }
         case .gpu:
-            if let util = engine.gpu.value?.primary?.utilization {
-                if util >= 0.90 { return .critical }
-                if util >= 0.70 { return .warning }
+            if let gpu = engine.gpu.value?.primary {
+                let util = gpu.utilization ?? 0
+                let vramFraction = (gpu.vramTotalBytes ?? 0) > 0
+                    ? Double(gpu.vramUsedBytes ?? 0) / Double(gpu.vramTotalBytes!)
+                    : 0
+                if util >= 0.90 || vramFraction >= 0.95 { return .critical }
+                if util >= 0.75 || vramFraction >= 0.85 { return .warning }
             }
         default:
             break
@@ -343,26 +345,19 @@ extension PanelSummary {
                                 caption: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
         case .memory:
             guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
-            return PanelSummary(value: formatter.percent(memory.pressureFraction),
-                                caption: formatter.memory(memory.usedBytes))
+            return PanelSummary(value: formatter.percent(memory.usedFraction),
+                                caption: "pressure " + formatter.percent(memory.pressureFraction))
         case .gpu:
             guard let gpu = engine.gpu.value else { return warmup(for: engine.gpu) }
             guard let device = gpu.primary else { return PanelSummary() }
-            // The bare figure, not "Memory 5.4 GB": a caption labels what is on
-            // its row, and a caption that long widens the shared caption column
-            // enough to squeeze the module labels into ellipses.
-            let vram = device.vramUsedBytes.map { formatter.memory($0) }
-            // The handover swaps a state-size name for a headline-size number, so
-            // the slot is sized for both from the start and only the text moves.
+            let vramCaption = device.vramUsedBytes.map { "vram " + formatter.memory($0) }
             guard let utilization = device.utilization else {
-                return PanelSummary(value: device.name, caption: vram,
+                return PanelSummary(value: device.name, caption: vramCaption,
                                     emphasis: .state,
                                     reservedHeadlineText: formatter.percent(1.0),
                                     reservedValueText: device.name)
             }
-            // Device identity belongs in the expanded detail: it is the only
-            // caption long enough to break the column.
-            return PanelSummary(value: formatter.percent(utilization), caption: vram,
+            return PanelSummary(value: formatter.percent(utilization), caption: vramCaption,
                                 reservedHeadlineText: formatter.percent(1.0),
                                 reservedValueText: device.name)
         case .network:

@@ -125,10 +125,13 @@ extension PanelModuleView {
                                       title: "Memory composition",
                                       barHeight: Design.Space.s, showsLegend: false)
                 PanelSegmentLegend(segments: segments, format: .memoryBytes)
-                PanelBarRow(label: "Pressure", value: memory.memoryPressure.label,
+                PanelBarRow(label: "Pressure",
+                            value: "\(memory.memoryPressure.label) (\(formatter.percent(memory.pressureFraction)))",
                             fraction: memory.pressureFraction,
                             tint: tint)
                 PanelDetailGrid(entries: [
+                    PanelDetailEntry("Used", formatter.memory(memory.usedBytes)),
+                    PanelDetailEntry("Free", formatter.memory(memory.freeBytes)),
                     PanelDetailEntry("Swap", formatter.memory(memory.swapUsedBytes)),
                     PanelDetailEntry("Total", formatter.memory(memory.totalBytes)),
                 ])
@@ -192,8 +195,8 @@ extension PanelModuleView {
             if let device = gpu.primary {
                 VStack(alignment: .leading, spacing: Design.Space.xs) {
                     if let used = device.vramUsedBytes, let total = device.vramTotalBytes, total > 0 {
-                        PanelBarRow(label: device.memoryLabel,
-                                    value: "of \(formatter.memory(total))",
+                        PanelBarRow(label: "VRAM",
+                                    value: "\(formatter.memory(used)) of \(formatter.memory(total))",
                                     fraction: Double(used) / Double(total),
                                     tint: tint)
                     }
