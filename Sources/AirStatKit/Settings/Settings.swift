@@ -125,6 +125,20 @@ public enum MenuBarMetric: String, Sendable, Codable, CaseIterable, Equatable, H
         }
     }
 
+    /// The Activity Monitor tab that answers "what is behind this number", by the index
+    /// Activity Monitor stores as `SelectedTab`: CPU, Memory, Energy, Disk, Network.
+    /// Temperature, frequency, fans and GPU land on CPU, which is where the processes
+    /// heating the machine are ranked.
+    public var activityMonitorTab: Int {
+        switch self {
+        case .cpuUsage, .cpuTemperature, .cpuFrequency, .gpuUsage, .fanSpeed, .uptime: return 0
+        case .memoryUsage, .memoryPressure: return 1
+        case .battery, .batteryTime, .systemPower: return 2
+        case .diskActivity, .diskFree, .diskUsage: return 3
+        case .networkThroughput, .networkUpload, .networkDownload: return 4
+        }
+    }
+
     /// Styles that make sense for this metric. Only the metrics that keep a series
     /// can be graphed; the rest are a number, with or without their icon.
     ///
@@ -268,6 +282,10 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// the only surface left, and Settings is reached by launching the app again, by
     /// its hot key, or from the widget's context menu.
     public var isVisible: Bool
+    /// The charge printed inside the battery indicator. On by default, the reason most
+    /// people put a battery in a second status item at all; off, the indicator is the
+    /// bare shape, as the system draws it until you ask for the number.
+    public var showsBatteryPercentage: Bool
 
     /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
     /// proportional digits shimmers as it changes, which is the single most visible
@@ -287,10 +305,12 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
 
     public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
                 usesCombinedItem: Bool = true,
-                isVisible: Bool = true) {
+                isVisible: Bool = true,
+                showsBatteryPercentage: Bool = true) {
         self.items = items
         self.usesCombinedItem = usesCombinedItem
         self.isVisible = isVisible
+        self.showsBatteryPercentage = showsBatteryPercentage
     }
 
     /// CPU, its temperature, GPU, and the battery.
@@ -323,7 +343,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 
     private enum CodingKeys: String, CodingKey {
-        case items, usesCombinedItem, isVisible
+        case items, usesCombinedItem, isVisible, showsBatteryPercentage
     }
 
     /// Files written before the packing settings were removed still load: the keys
@@ -336,6 +356,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         items = decodedItems.isEmpty ? MenuBarSettings.defaultItems : decodedItems.map { $0.sanitized() }
         usesCombinedItem = c.value(.usesCombinedItem, or: true)
         isVisible = c.value(.isVisible, or: true)
+        showsBatteryPercentage = c.value(.showsBatteryPercentage, or: true)
     }
 }
 

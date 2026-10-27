@@ -46,6 +46,8 @@ public final class StatusItemController {
 
     public var onPrimaryAction: (() -> Void)?
     public var onSecondaryAction: (() -> Void)?
+    /// An Option-click, with the metric of the readout that was clicked.
+    public var onAlternateAction: ((MenuBarMetric?) -> Void)?
     public var onVisibilityChange: ((Bool) -> Void)?
 
     private let engine: MetricsEngine
@@ -274,6 +276,19 @@ public final class StatusItemController {
 
     // MARK: Input
 
+    /// Separate items each carry their readout; the combined one is asked which of its
+    /// readouts lies under the pointer.
+    private func metric(clickedIn button: NSStatusBarButton, event: NSEvent?) -> MenuBarMetric? {
+        guard let entry = hosted.first(where: { $0.item.button === button }) else { return nil }
+        var readout = entry.readout
+        if readout == nil, let event {
+            let point = entry.content.convert(event.locationInWindow, from: nil)
+            readout = entry.content.readout(atX: point.x)
+        }
+        let items = settings.settings.menuBar.items
+        return items.first { $0.id == readout }?.metric ?? settings.settings.menuBar.enabledItems.first?.metric
+    }
+
     @objc private func handleClick(_ sender: NSStatusBarButton) {
         // Recorded before the action runs, because the action is what reads `anchorRect`
         // and the panel belongs under the item that was clicked.
@@ -281,7 +296,10 @@ public final class StatusItemController {
         let event = NSApp.currentEvent
         let isSecondary = event?.type == .rightMouseUp
             || event?.modifierFlags.contains(.control) == true
-        if isSecondary {
+        if !isSecondary, event?.modifierFlags.contains(.option) == true,
+           let onAlternateAction {
+            onAlternateAction(metric(clickedIn: sender, event: event))
+        } else if isSecondary {
             onSecondaryAction?()
         } else {
             onPrimaryAction?()

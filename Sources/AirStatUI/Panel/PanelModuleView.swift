@@ -424,8 +424,11 @@ extension PanelSummary {
             // The caption is the pack's instantaneous power: on battery it is the
             // system draw, on AC it is the charge rate — which also carries the
             // "is it charging" answer the old "charging" caption held, in a number.
+            // Held, the pack moves no current and "0.0 W" would read as a fault.
+            let caption = power.isOptimizedChargingPaused
+                ? "on hold" : power.batteryWatts.map { formatter.watts(abs($0)) }
             return PanelSummary(value: formatter.percentValue(percentage),
-                                caption: power.batteryWatts.map { formatter.watts(abs($0)) },
+                                caption: caption,
                                 icon: power.isCharging || power.isPluggedIn ? "powerplug" : nil)
         case .thermal:
             guard let thermal = engine.thermal.value else { return warmup(for: engine.thermal) }

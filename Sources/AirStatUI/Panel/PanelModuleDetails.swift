@@ -436,6 +436,7 @@ extension PanelModuleView {
                 }
                 let entries = powerEntries(power)
                 if !entries.isEmpty { PanelDetailGrid(entries: entries) }
+                energyConsumers
                 ForEach(power.accessories) { accessory in
                     accessoryRow(accessory)
                 }
@@ -500,12 +501,13 @@ extension PanelModuleView {
     private func powerEntries(_ power: PowerSnapshot) -> [PanelDetailEntry] {
         guard power.hasBattery else { return [] }
         var entries: [PanelDetailEntry] = []
+        if let state = chargeState(power) {
+            entries.append(PanelDetailEntry("State", state))
+        }
         if power.isCharging, let toFull = power.timeToFull {
             entries.append(PanelDetailEntry("Full in", formatter.duration(toFull)))
         } else if let toEmpty = power.timeToEmpty {
             entries.append(PanelDetailEntry("Time left", formatter.duration(toEmpty)))
-        } else if power.isFullyCharged {
-            entries.append(PanelDetailEntry("State", "Charged"))
         }
         if let health = power.healthPercent {
             entries.append(PanelDetailEntry("Health", formatter.percentValue(health)))
@@ -521,6 +523,47 @@ extension PanelModuleView {
         }
         return entries
     }
+
+    /// What the charger is doing, in the words the system's battery menu uses. Nil on
+    /// battery, where "Time left" already says it.
+    private func chargeState(_ power: PowerSnapshot) -> String? {
+        if power.isCharging { return power.isChargingSlowly ? "Charging slowly" : "Charging" }
+        if power.isFullyCharged, power.isPluggedIn { return "Charged" }
+        if power.isOptimizedChargingPaused { return "Charging on hold" }
+        return nil
+    }
+
+    /// The processes drawing the most power, the question a falling battery raises.
+    /// Read from the process list the panel already samples, so it costs nothing of
+    /// its own, and present only while that list is: with the Top Processes module
+    /// off, the list is never read.
+    @ViewBuilder
+    private var energyConsumers: some View {
+        if let processes = engine.processes.value {
+            let ranked = processes.processes
+                .filter { ($0.energyImpact ?? 0) >= Self.significantWatts }
+                .sorted { ($0.energyImpact ?? 0) > ($1.energyImpact ?? 0) }
+                .prefix(Self.energyRowCount)
+            if !ranked.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Using significant energy")
+                        .font(Design.Text.label)
+                        .foregroundStyle(Design.Palette.secondaryText)
+                        .padding(.bottom, Design.Space.xxs)
+                    ForEach(Array(ranked)) { process in
+                        processRow(process, value: formatter.watts(process.energyImpact, decimals: 2))
+                    }
+                }
+                .padding(.top, Design.Space.s)
+            }
+        }
+    }
+
+    /// Below a twentieth of a watt a process is background noise on Apple silicon, and
+    /// listing it would make an idle machine look busy. Measured, not guessed: an
+    /// editor helper at 45% of an efficiency core drew 0.10 W.
+    static let significantWatts = 0.05
+    static let energyRowCount = 5
 
     // MARK: Thermal
 
@@ -660,8 +703,7 @@ extension PanelModuleView {
         switch sortKey {
         case .cpu, .name, .pid: return formatter.unclampedPercent(process.cpuPercent)
         case .memory: return formatter.memory(process.memoryBytes)
-        case .energy: return process.energyImpact.map { formatter.fixed($0, decimals: 1) }
-                             ?? MetricFormatter.unavailable
+        case .energy: return formatter.watts(process.energyImpact, decimals: 2)
         case .diskIO: return formatter.diskRate(diskTotal(process))
         case .networkIO: return MetricFormatter.unavailable
         }

@@ -328,7 +328,9 @@ public enum SnapshotFixtures {
                            executablePath: "/Applications/\(entry.0).app",
                            cpuPercent: entry.1, memoryBytes: entry.2,
                            threadCount: entry.3, userName: "byren",
-                           startTime: referenceDate.addingTimeInterval(-3_600))
+                           startTime: referenceDate.addingTimeInterval(-3_600),
+                           // Roughly what Apple silicon charges per percent of a core.
+                           energyImpact: entry.1 * 0.045)
             },
             totalProcessCount: 648,
             totalThreadCount: 2_314

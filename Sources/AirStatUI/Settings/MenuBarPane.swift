@@ -50,6 +50,20 @@ struct MenuBarPane: View {
             }
             .disabled(!isVisible)
 
+            if items.contains(where: { $0.isEnabled && $0.style == .battery }) {
+                Section {
+                    Toggle("Show percentage inside the battery",
+                           isOn: settings.binding(\.menuBar.showsBatteryPercentage))
+                } header: {
+                    Text("Battery")
+                } footer: {
+                    Text("While charging or on power adapter the battery shows the bolt "
+                         + "or the plug instead.")
+                    .font(.callout)
+                    .foregroundStyle(Design.Palette.secondaryText)
+                }
+                .disabled(!isVisible)
+            }
         }
         .settingsFormStyle()
     }

@@ -442,8 +442,12 @@ public struct PowerSnapshot: Sendable, Equatable {
     public var adapterName: String?
     /// Total system power draw where the platform exposes it.
     public var systemWatts: Double?
-    /// True when macOS is holding the charge at ~80% for battery longevity.
+    /// On AC, short of full, and not charging: macOS is holding the charge, for
+    /// Optimized Battery Charging, a charge limit, or heat. Which one is not published.
     public var isOptimizedChargingPaused: Bool
+    /// Charging, but below the adapter's rate because the charger says so: a weak
+    /// adapter, heat, or the slow top-off near full.
+    public var isChargingSlowly: Bool = false
     /// Batteries in things attached to the Mac: earbuds, a mouse, a keyboard.
     /// Whatever the power source list reports for accessories, read once a minute.
     public var accessories: [AccessoryBattery] = []
@@ -636,6 +640,9 @@ public struct ProcessRow: Sendable, Equatable, Hashable, Identifiable {
     public var threadCount: Int
     public var userName: String?
     public var startTime: Date?
+    /// Average power over the last sampling interval, in watts, from the energy the
+    /// kernel charges the process (`ri_energy_nj`). Nil on a process's first sample in
+    /// the list, which has nothing to difference against.
     public var energyImpact: Double?
     public var diskReadBytesPerSecond: Double?
     public var diskWriteBytesPerSecond: Double?

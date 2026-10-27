@@ -251,6 +251,13 @@ public final class PowerCollector: MetricSource {
         // undocumented and its meanings are not verifiable from a single power state.
         snapshot.isOptimizedChargingPaused =
             snapshot.isPluggedIn && !snapshot.isCharging && !snapshot.isFullyCharged
+
+        // The charger's own bitfield of reasons it is holding the rate back. What each
+        // bit means is undocumented, so only "any reason at all" is taken from it.
+        if snapshot.isCharging,
+           let reason = (dictionary("ChargerData")?["SlowChargingReason"] as? NSNumber)?.intValue {
+            snapshot.isChargingSlowly = reason != 0
+        }
     }
 
     private func applyElectrical(to snapshot: inout PowerSnapshot) {

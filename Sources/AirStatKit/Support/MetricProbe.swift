@@ -269,13 +269,15 @@ public enum MetricProbe {
 
     private static func describeProcesses(_ s: ProcessSnapshot) -> [String] {
         var lines = ["\(s.totalProcessCount) processes / \(s.totalThreadCount) threads"]
-        lines.append("  PID     CPU%    MEM        THR  NAME")
+        lines.append("  PID     CPU%    MEM        THR  POWER    NAME")
         for process in s.processes.prefix(12) {
-            lines.append("  " + String(format: "%-7d %6.1f  %-9s %4d  %@",
+            let power = process.energyImpact.map { String(format: "%.2f W", $0) } ?? "-"
+            lines.append("  " + String(format: "%-7d %6.1f  %-9s %4d  %-7s  %@",
                                        process.pid,
                                        process.cpuPercent,
                                        (fmt.bytes(process.memoryBytes) as NSString).utf8String!,
                                        process.threadCount,
+                                       (power as NSString).utf8String!,
                                        process.name))
         }
         return lines

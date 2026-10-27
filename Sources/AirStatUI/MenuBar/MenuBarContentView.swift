@@ -57,42 +57,41 @@ public final class MenuBarContentView: NSView {
         /// Never let the item shrink to a target too small to click.
         static let minimumWidth: CGFloat = 24
 
-        /// The battery indicator, drawn to the proportions of the system's own
-        /// `battery.100percent` rather than guessed: a body about twice as wide as it is
-        /// tall with corners a third of its height, a one-point outline, one point of air
-        /// between the outline and the fill, and a half-pill terminal standing one point
-        /// off the body. Apple's is 20 by 11 at fifteen points; this one is scaled up to
-        /// 24 by 12 because, unlike theirs, it carries three digits inside the fill.
-        static let batteryBodyWidth: CGFloat = 24
+        /// The battery indicator, measured off the images Control Center itself draws
+        /// the menu bar battery from (`battery-outline`, `battery-cap`, `battery-bolt`,
+        /// `battery-plug` in ControlCenter.app), rasterised at twenty times and read edge
+        /// by edge. Drawn here rather than loaded from there: those are private assets in
+        /// another app's catalog, and a path costs nothing to keep.
+        ///
+        /// A 23 by 12 body, a one-point outline at half the label's opacity with
+        /// circular 3.5-point corners, and a terminal 1.5 wide and 4.2 tall at 60%
+        /// sitting flush against it.
+        static let batteryBodyWidth: CGFloat = 23
         static let batteryBodyHeight: CGFloat = 12
-        static let batteryCornerRadius: CGFloat = 4
+        static let batteryCornerRadius: CGFloat = 3.5
         static let batteryStroke: CGFloat = 1
-        /// The terminal on the right, standing off the body so it reads as a part of
-        /// the battery and not as a bump in the outline.
+        static let batteryShellAlpha: CGFloat = 0.5
         static let batteryNubWidth: CGFloat = 1.5
-        static let batteryNubHeight: CGFloat = 4.5
-        static let batteryNubGap: CGFloat = 1
-        /// Outer edge to the fill on both axes: the outline plus a point of air. The
-        /// fill's corners are the shell's minus the inset, so the two curves stay
-        /// concentric instead of a sharp box sitting inside a round one.
+        static let batteryNubHeight: CGFloat = 4.2
+        static let batteryNubAlpha: CGFloat = 0.6
+        /// Outer edge to the fill: the outline plus a point of air, as in Apple's own
+        /// `battery.100percent`. The fill's corners are the shell's minus the inset, so
+        /// the two curves stay concentric.
         static let batteryFillInset: CGFloat = 2
         /// A charge too small to draw honestly still gets a sliver, because an empty
         /// shell and a shell at 2% are not the same thing.
         static let batteryMinimumFill: CGFloat = 2
-        /// The shell and its terminal sit back from the fill, as Apple's do, so the
-        /// eye lands on the charge rather than on the container.
-        static let batteryShellAlpha: CGFloat = 0.4
-        /// The digits inside the fill. Semibold because a knocked-out stem one device
-        /// pixel wide comes out as a dotted line at 1x.
+        /// The digits inside the fill: as large as the eight-point track allows with a
+        /// point of air above and below the cap height, and "100" still clears the
+        /// rounded ends of a nineteen-point track.
         static let batteryValueFontSize: CGFloat = 8.5
-        /// The bolt overhangs the body by half a point at each end, exactly as it does
-        /// in `battery.100percent.bolt`, and its 0.64 aspect is `bolt.fill`'s own.
-        static let batteryBoltHeight: CGFloat = 13
-        static let batteryBoltAspect: CGFloat = 0.64
-        /// The plug shown while on mains with the battery full or held.
-        static let batteryPlugHeight: CGFloat = 8
-        /// The gap cut around the bolt and the plug, through the fill and the outline
-        /// alike, so the glyph stays legible over either.
+        /// The bolt's ink is 7.9 by 11.9 in Apple's image: as tall as the body, so its
+        /// tips and the gap around them cut the outline.
+        static let batteryBoltHeight: CGFloat = 11.9
+        static let batteryBoltAspect: CGFloat = 0.66
+        /// `powerplug.portrait.fill` at this size inks 7 by 12, which is Apple's plug.
+        static let batteryPlugPointSize: CGFloat = 10.5
+        /// The gap cut around the bolt and the plug, through the fill and the outline.
         static let batteryGlyphHalo: CGFloat = 1
         /// The network status lights: two dots stacked, download over upload. Five
         /// points each with three between puts the pair at 13, which sits inside the
@@ -156,6 +155,19 @@ public final class MenuBarContentView: NSView {
     /// Drawn content only; never intercepts clicks so the status button keeps
     /// receiving them.
     public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// The readout drawn under `x`, in this view's coordinates, or the nearest one when
+    /// `x` falls in the gap between two. Nil only when nothing is drawn.
+    public func readout(atX x: CGFloat) -> UUID? {
+        placements.min { a, b in
+            distance(x, a) < distance(x, b)
+        }?.item.id
+    }
+
+    private func distance(_ x: CGFloat, _ placement: Placement) -> CGFloat {
+        let start = placement.x, end = placement.x + placement.geometry.width
+        return x < start ? start - x : (x > end ? x - end : 0)
+    }
 
     public override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -304,10 +316,10 @@ public final class MenuBarContentView: NSView {
         }
 
         // The indicator is the whole readout and the shell is a fixed box: everything
-        // it says — fill, digits, bolt, plug — is said inside it, so nothing about
-        // its width ever moves.
+        // it says — fill, digits, bolt, plug — is said inside it, so nothing about its
+        // width ever moves.
         if item.style == .battery {
-            geometry.battery = Layout.batteryBodyWidth + Layout.batteryNubGap + Layout.batteryNubWidth
+            geometry.battery = Layout.batteryBodyWidth + Layout.batteryNubWidth
             return geometry
         }
 
@@ -823,29 +835,21 @@ public final class MenuBarContentView: NSView {
 
     // MARK: Battery
 
-    /// Draws the battery indicator: a rounded shell with a terminal on the right, filled
-    /// from the left in proportion to the charge, with the percentage set inside it.
+    /// Draws the battery indicator the way macOS draws its own: a dimmed shell with its
+    /// terminal, a fill in proportion to the charge, and inside it either the
+    /// percentage, knocked out of the fill, or the bolt or the plug standing over it
+    /// with a gap cut around them.
     ///
     /// Every value it needs arrives on `item`. Nothing here asks the engine what the
     /// battery is doing, because the status item redraws only when the model changes: a
     /// charge fetched at draw time would sit at whatever it was when some *other*
     /// readout last moved, and a battery that is wrong is worse than no battery.
-    ///
-    /// Inside the shell sits the state of the charge itself: the digits while on
-    /// battery, the bolt while current is going in, and the plug while on mains with
-    /// the battery full or held. The digits are knocked out of the fill; the bolt and
-    /// the plug get the system's own treatment instead, a one-point gap cut around
-    /// them through whatever is underneath, outline included.
-    ///
-    /// Everything is a path or a cached symbol mask. An earlier version read Control
-    /// Center's private images out of its bundle: that mapped a whole asset catalog into
-    /// a process that otherwise holds a few megabytes, would break the day Apple renamed
-    /// an image, and stretched bitmaps of one size into boxes of another.
     private func drawBattery(_ item: MenuBarItemRender, x: CGFloat, colors: ItemColors,
                              scale: CGFloat, context: CGContext) {
         let pixel = 1 / scale
         let line = max(Layout.batteryStroke, pixel)
         let ink = colors.batteryInk
+        let markAlpha = colors.mark.alphaComponent
 
         // Snapped outer box, then everything measured off it, so the stroke lands on a
         // half-pixel at 1x and the fill's edges land on whole ones.
@@ -853,45 +857,39 @@ public final class MenuBarContentView: NSView {
                                    y: bounds.midY - Layout.batteryBodyHeight / 2,
                                    width: Layout.batteryBodyWidth,
                                    height: Layout.batteryBodyHeight), scale: scale)
-        let nub = snapped(CGRect(x: outer.maxX + Layout.batteryNubGap,
-                                 y: bounds.midY - Layout.batteryNubHeight / 2,
-                                 width: Layout.batteryNubWidth,
-                                 height: Layout.batteryNubHeight), scale: scale)
-        // The shell stays the bar's own colour even at a low charge. macOS reddens the
-        // contents and leaves the container alone, and the contrast between the two is
-        // what makes the red read as a state rather than as a tint.
-        let shellColor = colors.mark.withAlphaComponent(
-            colors.mark.alphaComponent * Layout.batteryShellAlpha)
+        let nub = CGRect(x: outer.maxX,
+                         y: outer.midY - Layout.batteryNubHeight / 2,
+                         width: Layout.batteryNubWidth,
+                         height: Layout.batteryNubHeight)
 
         // One layer for the whole indicator, clipped to it so the layer is a few hundred
-        // pixels rather than the whole item: the knock-outs below clear what is under
-        // them, and inside a layer that is this drawing's own ink and nothing else.
+        // pixels rather than the whole item: the gaps cut below clear what is under them,
+        // and inside a layer that is this drawing's own ink and nothing else.
         context.saveGState()
         context.clip(to: outer.union(nub).insetBy(dx: -2, dy: -2))
         context.beginTransparencyLayer(auxiliaryInfo: nil)
 
+        // The shell stays the bar's own colour even at a low charge. macOS reddens the
+        // contents and leaves the container alone.
         let shell = outer.insetBy(dx: line / 2, dy: line / 2)
-        let shellRadius = max(Layout.batteryCornerRadius - line / 2, 0)
+        let shellRadius = Layout.batteryCornerRadius - line / 2
         context.addPath(CGPath(roundedRect: shell, cornerWidth: shellRadius,
                                cornerHeight: shellRadius, transform: nil))
-        context.setStrokeColor(shellColor.cgColor)
+        context.setStrokeColor(colors.mark.withAlphaComponent(
+            markAlpha * Layout.batteryShellAlpha).cgColor)
         context.setLineWidth(line)
         context.strokePath()
 
-        // Flat where it meets the body, round on the outside: a pill would read as a
-        // separate dot rather than as the battery's terminal.
-        let nubRadius = min(nub.width, nub.height / 2)
-        let terminal = CGMutablePath()
-        terminal.move(to: CGPoint(x: nub.minX, y: nub.minY))
-        terminal.addArc(tangent1End: CGPoint(x: nub.maxX, y: nub.minY),
-                        tangent2End: CGPoint(x: nub.maxX, y: nub.midY), radius: nubRadius)
-        terminal.addArc(tangent1End: CGPoint(x: nub.maxX, y: nub.maxY),
-                        tangent2End: CGPoint(x: nub.minX, y: nub.maxY), radius: nubRadius)
-        terminal.addLine(to: CGPoint(x: nub.minX, y: nub.maxY))
-        terminal.closeSubpath()
-        context.addPath(terminal)
-        context.setFillColor(shellColor.cgColor)
+        // The terminal is a slice of a disc, flat against the body: an ellipse centred
+        // on the body's edge, of which only the outside half is drawn.
+        context.saveGState()
+        context.clip(to: nub)
+        context.addEllipse(in: CGRect(x: nub.minX - nub.width, y: nub.minY,
+                                      width: nub.width * 2, height: nub.height))
+        context.setFillColor(colors.mark.withAlphaComponent(
+            markAlpha * Layout.batteryNubAlpha).cgColor)
         context.fillPath()
+        context.restoreGState()
 
         let track = outer.insetBy(dx: Layout.batteryFillInset, dy: Layout.batteryFillInset)
         let charge = min(max(item.batteryCharge ?? 0, 0), 1)
@@ -916,27 +914,30 @@ public final class MenuBarContentView: NSView {
         if item.isBatteryCharging {
             let height = Layout.batteryBoltHeight
             let width = height * Layout.batteryBoltAspect
+            // Traced with sharp corners; Apple's are softened. A half-point round stroke
+            // over a box shrunk by a quarter point gives the same ink with round tips.
             let bolt = batteryBoltPath(in: CGRect(x: outer.midX - width / 2,
                                                   y: outer.midY - height / 2,
-                                                  width: width, height: height),
+                                                  width: width, height: height)
+                                        .insetBy(dx: 0.25, dy: 0.25),
                                        scale: scale)
-            context.addPath(bolt)
-            context.setLineWidth(Layout.batteryGlyphHalo * 2)
             context.setLineJoin(.round)
+            context.addPath(bolt)
+            context.setLineWidth((Layout.batteryGlyphHalo + 0.25) * 2)
             context.setBlendMode(.clear)
             context.strokePath()
             context.setBlendMode(.normal)
             context.addPath(bolt)
             context.setFillColor(ink.cgColor)
-            context.fillPath()
+            context.setStrokeColor(ink.cgColor)
+            context.setLineWidth(0.5)
+            context.drawPath(using: .fillStroke)
         } else if item.isBatteryPlugged, let plug = plugGlyph(scale: scale) {
-            let height = Layout.batteryPlugHeight
-            let width = height * plug.size.width / plug.size.height
-            let rect = CGRect(x: snap(outer.midX - width / 2, scale),
-                              y: snap(outer.midY - height / 2, scale),
-                              width: width, height: height)
-            // A mask cannot be stroked, so the halo is the mask stamped clear at eight
-            // points around the glyph. It runs only when the model changes, not per frame.
+            let rect = CGRect(x: snap(outer.midX - plug.size.width / 2, scale),
+                              y: snap(outer.midY - plug.size.height / 2, scale),
+                              width: plug.size.width, height: plug.size.height)
+            // A mask cannot be stroked, so the gap is the mask stamped clear at eight
+            // points around the glyph. It runs only when the model changes.
             let halo = Layout.batteryGlyphHalo
             for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0),
                              (1, 0), (-1, 1), (0, 1), (1, 1)] as [(CGFloat, CGFloat)] {
@@ -951,6 +952,9 @@ public final class MenuBarContentView: NSView {
             context.fill(rect)
             context.restoreGState()
         } else if let text = item.batteryValueText {
+            // The bolt and the plug say the state on their own; digits beside them would
+            // be two glyphs fighting in a twelve-point box, so the number is only drawn
+            // when neither is.
             drawBatteryValue(text, in: outer, fillEdge: fillEdge, ink: ink,
                              scale: scale, context: context)
         }
@@ -959,15 +963,15 @@ public final class MenuBarContentView: NSView {
         context.restoreGState()
     }
 
-    /// The `powerplug.fill` symbol's silhouette, for the shell while the machine is on
-    /// mains and the battery is taking nothing. Used as a clip mask: the colour is
-    /// decided per pass, so only the alpha matters. Nil if the symbol lookup fails
-    /// — the digits then stay in the shell instead.
+    /// The `powerplug.portrait.fill` symbol's silhouette, for the battery while the
+    /// machine is on mains and taking nothing. Used as a clip mask: the colour is
+    /// decided per pass, so only the alpha matters. Nil if the symbol lookup fails, and
+    /// the battery is then drawn without it.
     private func plugGlyph(scale: CGFloat) -> (image: CGImage, size: CGSize)? {
-        let name = "powerplug.fill"
-        guard let template = symbol(named: name, pointSize: Layout.batteryPlugHeight),
+        let name = "powerplug.portrait.fill"
+        guard let template = symbol(named: name, pointSize: Layout.batteryPlugPointSize),
               let tinted = tinted(SymbolAsset(name: name,
-                                              pointSize: Layout.batteryPlugHeight,
+                                              pointSize: Layout.batteryPlugPointSize,
                                               template: template),
                                   color: .black, scale: scale),
               let rep = tinted.representations.first as? NSBitmapImageRep,
@@ -1289,9 +1293,9 @@ public final class MenuBarContentView: NSView {
         case stackedCaption
         /// One letter to a row beside a bar.
         case sideLabel
-        /// The digits inside the battery shell. Always monospaced and always medium,
-        /// whatever the rest of the bar is set in: this number is knocked out of solid
-        /// ink at nine points, and a regular weight does not survive that at 1x.
+        /// The digits inside the battery shell. Always monospaced and semibold,
+        /// whatever the rest of the bar is set in: the number is knocked out of solid
+        /// ink, and a regular stem does not survive that at 1x.
         case batteryValue
     }
 

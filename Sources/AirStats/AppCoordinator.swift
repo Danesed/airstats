@@ -49,6 +49,7 @@ final class AppCoordinator {
     func start() {
         statusItem.onPrimaryAction = { [weak self] in self?.togglePanel() }
         statusItem.onSecondaryAction = { [weak self] in self?.showContextMenu() }
+        statusItem.onAlternateAction = { [weak self] metric in self?.openActivityMonitor(for: metric) }
         statusItem.onVisibilityChange = { [weak self] visible in
             self?.engine.setMenuBarOccluded(!visible)
         }
@@ -175,6 +176,25 @@ final class AppCoordinator {
     }
 
     @objc private func menuShowSettings() { showSettings() }
+
+    /// Opens Activity Monitor on the tab behind the readout that was Option-clicked.
+    ///
+    /// The tab is chosen by writing the preference Activity Monitor itself saves when
+    /// you switch tabs, which it reads on launch. There is no scripting interface for
+    /// it, so when Activity Monitor is already running the tab cannot be changed from
+    /// outside and it is simply brought forward as the user left it.
+    private func openActivityMonitor(for metric: MenuBarMetric?) {
+        let bundleID = "com.apple.ActivityMonitor"
+        let isRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
+        if let metric, !isRunning {
+            CFPreferencesSetAppValue("SelectedTab" as CFString,
+                                     metric.activityMonitorTab as CFNumber,
+                                     bundleID as CFString)
+            CFPreferencesAppSynchronize(bundleID as CFString)
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+    }
 
     @objc private func menuToggleDesktopWidget() { toggleDesktopWidget() }
 

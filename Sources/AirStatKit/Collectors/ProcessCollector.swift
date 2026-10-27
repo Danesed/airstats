@@ -30,6 +30,8 @@ public final class ProcessCollector: MetricSource {
         var cpuTime: UInt64
         var diskRead: UInt64
         var diskWrite: UInt64
+        /// Nanojoules the kernel has charged the process since it started.
+        var energy: UInt64
         var hasIO: Bool
         var seenAt: UInt64
     }
@@ -144,6 +146,7 @@ public final class ProcessCollector: MetricSource {
             baselines[pid] = Baseline(cpuTime: cpuTime,
                                       diskRead: previous?.diskRead ?? 0,
                                       diskWrite: previous?.diskWrite ?? 0,
+                                      energy: previous?.energy ?? 0,
                                       hasIO: previous?.hasIO ?? false,
                                       seenAt: generation)
             candidates.append(Candidate(pid: pid, cpuPercent: percent,
@@ -249,11 +252,14 @@ public final class ProcessCollector: MetricSource {
         var memoryBytes = all.ptinfo.pti_resident_size
         var readRate: Double?
         var writeRate: Double?
+        var watts: Double?
 
-        var usage = rusage_info_v4()
+        // V6 rather than V4 for `ri_energy_nj`: the same call and the same copy, with
+        // the energy the kernel's power model has charged the process on the end.
+        var usage = rusage_info_v6()
         let usageOK = withUnsafeMutablePointer(to: &usage) {
             $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
-                proc_pid_rusage(candidate.pid, RUSAGE_INFO_V4, $0)
+                proc_pid_rusage(candidate.pid, RUSAGE_INFO_V6, $0)
             }
         } == 0
 
@@ -270,9 +276,16 @@ public final class ProcessCollector: MetricSource {
                     if usage.ri_diskio_byteswritten >= previous.diskWrite {
                         writeRate = Double(usage.ri_diskio_byteswritten - previous.diskWrite) / elapsed
                     }
+                    // Nanojoules over seconds is nanowatts. Average power over the
+                    // interval, which is what "using significant energy" means; the
+                    // instantaneous figure would rank whoever woke up last.
+                    if usage.ri_energy_nj >= previous.energy {
+                        watts = Double(usage.ri_energy_nj - previous.energy) / elapsed / 1_000_000_000
+                    }
                 }
                 previous.diskRead = usage.ri_diskio_bytesread
                 previous.diskWrite = usage.ri_diskio_byteswritten
+                previous.energy = usage.ri_energy_nj
                 previous.hasIO = true
                 baselines[candidate.pid] = previous
             }
@@ -292,6 +305,7 @@ public final class ProcessCollector: MetricSource {
                           threadCount: Int(all.ptinfo.pti_threadnum),
                           userName: userName(for: all.pbsd.pbi_uid),
                           startTime: start,
+                          energyImpact: watts,
                           diskReadBytesPerSecond: readRate,
                           diskWriteBytesPerSecond: writeRate,
                           isAppleSignedSystem: path.map(Self.isSystemPath) ?? false)

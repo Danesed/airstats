@@ -68,13 +68,11 @@ public struct MenuBarItemRender: Equatable, Sendable {
     /// Charge at or below `MenuBarItemRender.lowBatteryFraction` and not charging.
     /// Carried rather than recomputed in the view so the threshold lives in one place.
     public var isBatteryLow: Bool
-    /// The digits drawn inside the shell: whole percent, and no percent sign.
-    ///
-    /// The sign is dropped because there is nothing else a number inside a battery could
-    /// be a proportion of, and at nine points inside a 24-point shell it is a character
-    /// that costs a third of the width to say something the shape already says. Carried
-    /// as text rather than derived from `batteryCharge` in the view for the usual
-    /// reason: the view does no interpretation, and rounding is interpretation.
+    /// The digits drawn inside the shell: whole percent, and no percent sign, which
+    /// costs a third of a 19-point track to say what the shape already says. Nil when
+    /// the user has turned the percentage off. Carried as text rather than derived from
+    /// `batteryCharge` in the view for the usual reason: the view does no
+    /// interpretation, and rounding is interpretation.
     public var batteryValueText: String?
     /// What the `.statusDot` style draws. Nil on every readout but the up-and-down
     /// network one, and carried here for the reason the battery fields are: the view
@@ -382,7 +380,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                 // the digits and the fill can never disagree about how full it is.
                 battery = BatteryState(charge: charge, isCharging: power.isCharging,
                                        isPluggedIn: power.isPluggedIn, isLow: isLow,
-                                       valueText: String(Int((charge * 100).rounded())))
+                                       valueText: settings.menuBar.showsBatteryPercentage
+                                           ? String(Int((charge * 100).rounded())) : nil)
                 // The indicator style takes the digits off the screen, so this is the
                 // only place the exact charge is still stated — and while charging the
                 // drawn text is a bolt or nothing, so it is spelled from the source.
@@ -456,7 +455,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         /// which is the state the system's own plug glyph answers.
         var isPluggedIn: Bool
         var isLow: Bool
-        var valueText: String
+        /// Nil when the user has turned the percentage off.
+        var valueText: String?
     }
 
     private static func finish(config: MenuBarItemConfig,

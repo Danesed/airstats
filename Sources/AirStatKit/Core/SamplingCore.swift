@@ -1,4 +1,6 @@
 import Foundation
+import IOKit.ps
+import notify
 
 /// Per-source scheduling state. Generic so each concrete collector keeps its
 /// strong type all the way to the snapshot — no `Any` boxing on the hot path.
@@ -153,6 +155,20 @@ public final class SamplingCore: @unchecked Sendable {
     private var pendingWakeFlag = false
     private var isRunning = false
     private var thermalCadenceMultiplier = 1.0
+    /// Registration for powerd's "a power source changed" notification. Plugging in,
+    /// unplugging, a charge hold starting and the percentage ticking over all post it,
+    /// so the battery does not have to be polled to notice any of them.
+    private var powerNotifyToken = NOTIFY_TOKEN_INVALID
+    /// Set by that notification and spent by the next tick, which samples the power
+    /// source whatever its cadence says. Not a sample of its own: every snapshot folds
+    /// every metric into history, so an out-of-band tick would plant an extra point in
+    /// each chart. The next regular tick is at most one update interval away.
+    private var powerEventPending = false
+    /// With events covering every change a user can see in the menu bar, the battery's
+    /// own cadence only has to keep watts and time remaining fresh, which nothing reads
+    /// until the panel or the widget is open. Until then it is polled this many times
+    /// more slowly: five seconds becomes thirty.
+    static let powerIdleCadenceMultiplier = 6.0
 
     /// A single settings transaction keeps interval, source selection and network
     /// lookup changes on one queue hop. This matters while a settings control emits
@@ -193,6 +209,7 @@ public final class SamplingCore: @unchecked Sendable {
         queue.async { [self] in
             guard !isRunning else { return }
             isRunning = true
+            registerPowerNotificationLocked()
             rescheduleTimerLocked()
             sampleLocked()
         }
@@ -203,6 +220,10 @@ public final class SamplingCore: @unchecked Sendable {
             isRunning = false
             timer?.cancel()
             timer = nil
+            if powerNotifyToken != NOTIFY_TOKEN_INVALID {
+                notify_cancel(powerNotifyToken)
+                powerNotifyToken = NOTIFY_TOKEN_INVALID
+            }
             forEachSlot { $0.shutdown() }
         }
     }
@@ -310,6 +331,17 @@ public final class SamplingCore: @unchecked Sendable {
 
     // MARK: Internals
 
+    private func registerPowerNotificationLocked() {
+        guard powerNotifyToken == NOTIFY_TOKEN_INVALID else { return }
+        var token = NOTIFY_TOKEN_INVALID
+        let status = notify_register_dispatch(kIOPSNotifyPowerSource, &token, queue) { [weak self] _ in
+            self?.powerEventPending = true
+        }
+        // A failed registration leaves the battery on its old five-second poll, which
+        // is the behaviour it had before there were events at all.
+        if status == NOTIFY_STATUS_OK { powerNotifyToken = token }
+    }
+
     private func forEachSlot(_ body: (any SlotErasing) -> Void) {
         body(cpuSlot); body(memorySlot); body(gpuSlot); body(networkSlot)
         body(diskSlot); body(powerSlot); body(thermalSlot); body(processSlot)
@@ -367,12 +399,19 @@ public final class SamplingCore: @unchecked Sendable {
                     multiplier *= 2.0
                 }
             }
+            var forced = force
+            if slot.identifier == .power {
+                forced = forced || powerEventPending
+                if powerNotifyToken != NOTIFY_TOKEN_INVALID, activity < .desktopWidget {
+                    multiplier *= Self.powerIdleCadenceMultiplier
+                }
+            }
             if slot.tick(now: now,
                          activity: activity,
                          isEnabled: enabledSources.contains(slot.identifier),
                          baseInterval: baseInterval,
                          didWakeFromSleep: didWake,
-                         force: force,
+                         force: forced,
                          thermalCadenceMultiplier: multiplier) {
                 changed = true
             }
@@ -385,6 +424,7 @@ public final class SamplingCore: @unchecked Sendable {
         run(networkSlot)
         run(diskSlot)
         run(powerSlot)
+        powerEventPending = false
         run(thermalSlot)
         // Processes are by far the most expensive source; only ever sampled when
         // the panel that displays them is actually on screen, or twice in a minute

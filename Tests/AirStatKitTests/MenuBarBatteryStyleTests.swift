@@ -372,3 +372,56 @@ struct BatteryDrawingTests {
         }
     }
 }
+
+@Suite("The percentage inside the battery can be turned off")
+struct BatteryPercentageSettingTests {
+
+    private func item(showsPercentage: Bool) -> MenuBarItemRender {
+        let config = MenuBarItemConfig(metric: .battery, style: .battery, showsCaption: false)
+        var snapshot = SnapshotFixtures.nominal
+        snapshot.power = .value(SnapshotFixtures.power(percent: 76, charging: false))
+        let model = MenuBarRenderModel(
+            snapshot: snapshot,
+            history: SnapshotFixtures.history(),
+            settings: Settings(menuBar: MenuBarSettings(items: [config],
+                                                        showsBatteryPercentage: showsPercentage)),
+            isStale: false)
+        return model.items[0]
+    }
+
+    @Test("off, no digits travel, and the fill still does")
+    func offDropsDigits() {
+        let off = item(showsPercentage: false)
+        #expect(off.batteryValueText == nil)
+        #expect(off.batteryCharge == 0.76)
+        #expect(item(showsPercentage: true).batteryValueText == "76")
+    }
+
+    /// A settings file written before the option existed has to keep the number.
+    @Test("a settings file without the key keeps the percentage")
+    func missingKeyDefaultsOn() throws {
+        let json = #"{"menuBar":{"items":[{"metric":"battery","style":"battery"}]}}"#
+        let settings = try JSONDecoder().decode(Settings.self, from: Data(json.utf8))
+        #expect(settings.menuBar.showsBatteryPercentage)
+    }
+}
+
+@Suite("Option-click opens Activity Monitor on the tab behind the readout")
+struct ActivityMonitorTabTests {
+
+    @Test("each family lands on its own tab")
+    func tabs() {
+        #expect(MenuBarMetric.cpuUsage.activityMonitorTab == 0)
+        #expect(MenuBarMetric.memoryPressure.activityMonitorTab == 1)
+        #expect(MenuBarMetric.battery.activityMonitorTab == 2)
+        #expect(MenuBarMetric.diskActivity.activityMonitorTab == 3)
+        #expect(MenuBarMetric.networkThroughput.activityMonitorTab == 4)
+    }
+
+    @Test("every metric names a tab Activity Monitor has")
+    func inRange() {
+        for metric in MenuBarMetric.allCases {
+            #expect((0...4).contains(metric.activityMonitorTab), "\(metric)")
+        }
+    }
+}
