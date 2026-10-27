@@ -88,7 +88,11 @@ if patched != strings:
 PY
 
 # Ad-hoc signature. Without any signature macOS refuses some window-server
-# privileges a status item needs.
+# privileges a status item needs. The framework first: the strings patch above broke
+# its seal, and signing only the outer bundle leaves `codesign --verify --deep`
+# failing on a local build.
+codesign --force --sign - --timestamp=none \
+  "$APP/Contents/Frameworks/Sparkle.framework" >/dev/null 2>&1 || true
 codesign --force --sign - --timestamp=none "$APP" >/dev/null 2>&1 || {
   echo "warning: codesign failed; the app may still run" >&2
 }
