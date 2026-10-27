@@ -128,7 +128,7 @@ extension PanelModuleView {
                 PanelBarRow(label: "Pressure",
                             value: "\(memory.memoryPressure.label) (\(formatter.percent(memory.pressureFraction)))",
                             fraction: memory.pressureFraction,
-                            tint: tint)
+                            tint: pressureTint(for: memory))
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Used", formatter.memory(memory.usedBytes)),
                     PanelDetailEntry("Free", formatter.memory(memory.freeBytes)),
@@ -139,6 +139,17 @@ extension PanelModuleView {
                 history()
             }
         }
+    }
+
+    private func pressureTint(for memory: MemorySnapshot) -> Color {
+        guard settings.settings.panel.showsAlertColors else { return metricColor }
+        if memory.memoryPressure == .critical || memory.pressureFraction >= 0.85 {
+            return Color.red
+        }
+        if memory.pressureFraction >= 0.70 {
+            return Color.orange
+        }
+        return metricColor
     }
 
     /// The biggest memory users, ranked here rather than in the Top Processes module
@@ -544,11 +555,11 @@ extension PanelModuleView {
     /// "1,820 RPM · 23%" — the RPM it is spinning at and how far up its rated
     /// range that is, which is the number RPM alone cannot carry.
     private func fanText(_ fan: FanInfo) -> String {
-        var text = formatter.rpm(fan.currentRPM)
         if let maxRPM = fan.maxRPM, maxRPM > 0 {
-            text += " · \(formatter.percentValue(100 * fan.currentRPM / maxRPM))"
+            let pct = formatter.percentValue(100 * fan.currentRPM / maxRPM)
+            return "\(pct) (\(formatter.rpm(fan.currentRPM)))"
         }
-        return text
+        return formatter.rpm(fan.currentRPM)
     }
 
     // MARK: Processes

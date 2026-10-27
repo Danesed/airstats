@@ -258,10 +258,10 @@ struct PanelModuleView: View {
         case .memory:
             if let memory = engine.memory.value {
                 let ramUsed = memory.usedFraction
-                if memory.memoryPressure == .critical || memory.pressureFraction >= 0.80 || ramUsed >= 0.95 {
+                if memory.memoryPressure == .critical || memory.pressureFraction >= 0.85 || ramUsed >= 0.90 {
                     return .critical
                 }
-                if memory.memoryPressure == .warning || memory.pressureFraction >= 0.65 || ramUsed >= 0.88 {
+                if ramUsed >= 0.75 || memory.pressureFraction >= 0.70 {
                     return .warning
                 }
             }
@@ -345,19 +345,46 @@ extension PanelSummary {
                                 caption: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
         case .memory:
             guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
-            return PanelSummary(value: formatter.percent(memory.usedFraction),
+            let usedStr = formatter.memory(memory.usedBytes)
+            let totalStr = formatter.memory(memory.totalBytes)
+            let ramValue: String
+            let usedParts = usedStr.components(separatedBy: " ")
+            let totalParts = totalStr.components(separatedBy: " ")
+            if usedParts.count == 2 && totalParts.count == 2 && usedParts[1] == totalParts[1] {
+                ramValue = "\(usedParts[0])/\(totalParts[0]) \(totalParts[1])"
+            } else {
+                ramValue = "\(usedStr)/\(totalStr)"
+            }
+            return PanelSummary(value: ramValue,
                                 caption: "pressure " + formatter.percent(memory.pressureFraction))
         case .gpu:
             guard let gpu = engine.gpu.value else { return warmup(for: engine.gpu) }
             guard let device = gpu.primary else { return PanelSummary() }
-            let vramCaption = device.vramUsedBytes.map { "vram " + formatter.memory($0) }
+            let utilCaption = device.utilization.map { "util " + formatter.percent($0) }
+            if let used = device.vramUsedBytes {
+                let usedStr = formatter.memory(used)
+                let vramValue: String
+                if let total = device.vramTotalBytes, total > 0 {
+                    let totalStr = formatter.memory(total)
+                    let usedParts = usedStr.components(separatedBy: " ")
+                    let totalParts = totalStr.components(separatedBy: " ")
+                    if usedParts.count == 2 && totalParts.count == 2 && usedParts[1] == totalParts[1] {
+                        vramValue = "\(usedParts[0])/\(totalParts[0]) \(totalParts[1])"
+                    } else {
+                        vramValue = "\(usedStr)/\(totalStr)"
+                    }
+                } else {
+                    vramValue = usedStr
+                }
+                return PanelSummary(value: vramValue, caption: utilCaption)
+            }
             guard let utilization = device.utilization else {
-                return PanelSummary(value: device.name, caption: vramCaption,
+                return PanelSummary(value: device.name, caption: nil,
                                     emphasis: .state,
                                     reservedHeadlineText: formatter.percent(1.0),
                                     reservedValueText: device.name)
             }
-            return PanelSummary(value: formatter.percent(utilization), caption: vramCaption,
+            return PanelSummary(value: formatter.percent(utilization), caption: nil,
                                 reservedHeadlineText: formatter.percent(1.0),
                                 reservedValueText: device.name)
         case .network:
@@ -395,12 +422,15 @@ extension PanelSummary {
                                 icon: power.isCharging || power.isPluggedIn ? "powerplug" : nil)
         case .thermal:
             guard let thermal = engine.thermal.value else { return warmup(for: engine.thermal) }
-            // The caption is the fastest fan: a temperature is only half the story,
-            // and "52°C" reads very differently depending on whether the fans have
-            // answered. "fan 1820" rather than "1,820 RPM" — the unit suffix would
-            // widen the shared caption column enough to squeeze module labels.
-            let fan = thermal.fans.max { $0.currentRPM < $1.currentRPM }
-                .map { "fan \(Int($0.currentRPM.rounded()))" }
+            // The caption is the fastest fan as percentage.
+            let fan: String? = {
+                guard let fastest = thermal.fans.max(by: { $0.currentRPM < $1.currentRPM }) else { return nil }
+                if let max = fastest.maxRPM, max > 0 {
+                    let pct = Int((100 * fastest.currentRPM / max).rounded())
+                    return "fan \(pct)%"
+                }
+                return "fan \(Int(fastest.currentRPM.rounded()))"
+            }()
             guard let celsius = thermal.cpuCelsius else {
                 return PanelSummary(value: thermal.pressure.label, caption: fan,
                                     emphasis: .state)
