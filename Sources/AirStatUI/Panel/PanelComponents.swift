@@ -146,9 +146,7 @@ struct PanelSegmentLegend: View {
 
     private func entry(_ segment: CompositionSegment) -> some View {
         HStack(spacing: Design.Space.xs) {
-            RoundedRectangle(cornerRadius: Design.Space.hairline, style: .continuous)
-                .fill(segment.tint)
-                .frame(width: Design.Space.s, height: Design.Space.s)
+            CompositionSwatch(segment: segment, side: Design.Space.s)
             Text(segment.shortLabel)
                 .font(Design.Text.caption)
                 .foregroundStyle(Design.Palette.secondaryText)

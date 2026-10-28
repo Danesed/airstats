@@ -17,15 +17,19 @@ public struct CompositionSegment: Equatable, Identifiable {
     /// Drawn as track rather than colour so the eye reads the bar as "how much is
     /// taken" without the app having to hide anything.
     public let isRemainder: Bool
+    /// Drawn as diagonal stripes of `tint` rather than a solid fill, so one part of a
+    /// monochrome bar can stand apart by texture instead of by hue.
+    public let isHatched: Bool
 
     public init(id: String, label: String, shortLabel: String? = nil,
-                value: Double, tint: Color, isRemainder: Bool = false) {
+                value: Double, tint: Color, isRemainder: Bool = false, isHatched: Bool = false) {
         self.id = id
         self.label = label
         self.shortLabel = shortLabel ?? label
         self.value = max(0, value)
         self.tint = tint
         self.isRemainder = isRemainder
+        self.isHatched = isHatched
     }
 }
 
@@ -108,8 +112,13 @@ public struct StackedCompositionBar: View {
             let drawn = segment.value > 0 ? max(width, Design.Space.hairline) : 0
             defer { x += width }
             guard drawn > 0, !segment.isRemainder else { continue }
-            result.append(Fill(path: Path(CGRect(x: x, y: 0, width: drawn, height: size.height)),
-                               tint: segment.tint))
+            let rect = CGRect(x: x, y: 0, width: drawn, height: size.height)
+            if segment.isHatched {
+                result.append(Fill(path: Path(rect), tint: segment.tint.opacity(CompositionSwatch.hatchBase)))
+                result.append(Fill(path: CompositionSwatch.hatch(in: rect), tint: segment.tint))
+            } else {
+                result.append(Fill(path: Path(rect), tint: segment.tint))
+            }
             // A hairline gap keeps two adjacent segments of similar weight apart
             // without needing a border colour that would fight the palette.
             if drawn > Design.Space.xs {
@@ -169,17 +178,7 @@ public struct StackedCompositionBar: View {
 
     private func entry(_ segment: CompositionSegment, abbreviated: Bool) -> some View {
         HStack(spacing: Design.Space.s) {
-            // The remainder swatch gets an outline: filled with the track colour alone
-            // it reads as a missing swatch rather than as "this part is empty".
-            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(segment.isRemainder ? Design.Palette.track : segment.tint)
-                .overlay {
-                    if segment.isRemainder {
-                        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                            .strokeBorder(Design.Palette.separator, lineWidth: Design.Space.hairline)
-                    }
-                }
-                .frame(width: 6, height: 6)
+            CompositionSwatch(segment: segment, side: 6)
             SwiftUI.Text(abbreviated ? segment.shortLabel : segment.label)
                 .font(Design.Text.caption)
                 .foregroundStyle(Design.Palette.secondaryText)
@@ -202,23 +201,76 @@ public struct StackedCompositionBar: View {
     }
 }
 
+/// A legend key that draws its segment the way the bar does: solid, hatched, or as
+/// an outlined patch of track for the remainder.
+struct CompositionSwatch: View {
+    let segment: CompositionSegment
+    let side: CGFloat
+
+    /// The hatched part keeps a faint fill under its stripes, so it still reads as
+    /// a part of the bar and not as a gap in it.
+    static let hatchBase = 0.22
+    private static let pitch: CGFloat = 3
+    private static let stripe: CGFloat = 1.25
+
+    /// Diagonal stripes, bottom-left to top-right, clipped to `rect`. Built as filled
+    /// parallelograms so it goes through the same fill path as the solid parts.
+    static func hatch(in rect: CGRect) -> Path {
+        var stripes = Path()
+        var x = rect.minX - rect.height
+        while x < rect.maxX {
+            stripes.addLines([
+                CGPoint(x: x, y: rect.maxY),
+                CGPoint(x: x + stripe, y: rect.maxY),
+                CGPoint(x: x + stripe + rect.height, y: rect.minY),
+                CGPoint(x: x + rect.height, y: rect.minY),
+            ])
+            stripes.closeSubpath()
+            x += pitch
+        }
+        return stripes.intersection(Path(rect))
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+        Group {
+            if segment.isRemainder {
+                // Filled with the track colour alone it would read as a missing swatch
+                // rather than as "this part is empty".
+                shape.fill(Design.Palette.track)
+                    .overlay { shape.strokeBorder(Design.Palette.separator, lineWidth: Design.Space.hairline) }
+            } else if segment.isHatched {
+                let rect = CGRect(x: 0, y: 0, width: side, height: side)
+                ZStack {
+                    PlotShape(Path(rect)).fill(segment.tint.opacity(Self.hatchBase))
+                    PlotShape(Self.hatch(in: rect)).fill(segment.tint)
+                }
+                .clipShape(shape)
+            } else {
+                shape.fill(segment.tint)
+            }
+        }
+        .frame(width: side, height: side)
+    }
+}
+
 extension CompositionSegment {
-    /// Memory's breakdown as the panel draws it: four shades of the memory tint for the
+    /// Memory's breakdown as the panel draws it: shades of the label colour for the
     /// parts in use, and free memory last as the remainder.
     public static func memory(_ memory: MemorySnapshot) -> [CompositionSegment] {
-        // One hue per kind of memory, so the part that is the problem is found by
-        // colour: compressed is the one that grows under pressure and gets the
-        // warm hue; cached is the harmless one the system gives back on demand,
-        // and stays grey.
+        // Monochrome, ordered from what apps hold to what the system gives back on
+        // demand. Compressed is the part that grows under pressure, so it alone is
+        // hatched: found by texture at a glance, without spending a hue on it.
+        let ink = Design.Palette.primaryText
         return [
             CompositionSegment(id: "app", label: "App", value: Double(memory.appBytes),
-                               tint: Color(nsColor: .systemBlue)),
+                               tint: ink),
             CompositionSegment(id: "wired", label: "Wired", value: Double(memory.wiredBytes),
-                               tint: Color(nsColor: .systemPurple)),
+                               tint: ink.opacity(0.62)),
             CompositionSegment(id: "compressed", label: "Compressed", shortLabel: "Comp",
-                               value: Double(memory.compressedBytes), tint: Color(nsColor: .systemOrange)),
+                               value: Double(memory.compressedBytes), tint: ink, isHatched: true),
             CompositionSegment(id: "cached", label: "Cached", value: Double(memory.cachedBytes),
-                               tint: Color(nsColor: .systemGray)),
+                               tint: ink.opacity(0.4)),
             CompositionSegment(id: "free", label: "Free", value: Double(memory.freeBytes),
                                tint: Design.Palette.track, isRemainder: true),
         ]
