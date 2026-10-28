@@ -45,10 +45,14 @@ struct PanelCoreRowTests {
 
     @Test("the shared slot is narrower than the preferred one only when it has to be")
     func slotShrinksOnlyWhenNeeded() {
-        let ten = PanelCoreRow.slotWidth(sharedAcross: 10)
+        // An Ultra's twenty-four P-cores fit at the preferred slot now that cores are
+        // narrow columns; thirty-two and forty-eight do not.
         let twentyFour = PanelCoreRow.slotWidth(sharedAcross: 24)
-        #expect(ten < PanelCoreRow.preferredSlotWidth)
-        #expect(twentyFour < ten)
-        #expect(twentyFour > 2)
+        let thirtyTwo = PanelCoreRow.slotWidth(sharedAcross: 32)
+        let fortyEight = PanelCoreRow.slotWidth(sharedAcross: 48)
+        #expect(twentyFour == PanelCoreRow.preferredSlotWidth)
+        #expect(thirtyTwo < PanelCoreRow.preferredSlotWidth)
+        #expect(fortyEight < thirtyTwo)
+        #expect(fortyEight > 2)
     }
 }

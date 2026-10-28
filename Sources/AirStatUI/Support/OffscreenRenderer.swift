@@ -342,6 +342,8 @@ enum PreviewEngine {
                                ? MinuteHistory(capacity: MinuteHistory.monthCapacity,
                                                bucketDuration: MinuteHistory.monthBucketDuration)
                                : SnapshotFixtures.monthHistory())
+        // Fixtures carry a fixed date, which would otherwise read as stale.
+        engine.staleOverride = false
         engineCache[key] = engine
         return engine
     }

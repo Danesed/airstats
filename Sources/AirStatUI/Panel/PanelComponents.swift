@@ -18,6 +18,9 @@ struct PanelCoreRow: View {
     let tint: Color
     var slotWidth: CGFloat = PanelCoreRow.preferredSlotWidth
     var labelWidth: CGFloat = PanelCoreRow.defaultLabelWidth
+    /// Room held for the strip, the widest cluster's, so the value after a shorter
+    /// cluster still lines up with the one after the longer.
+    var stripWidth: CGFloat?
 
     @Environment(\.metricFormatter) private var formatter
 
@@ -27,7 +30,11 @@ struct PanelCoreRow: View {
     /// and 24pt, the 75% and 100% cells are not reliably separable below 20 at 1x. A
     /// shorter strip saves a few points of panel and gives up the magnitude it was
     /// drawn to convey.
-    private static let stripHeight: CGFloat = 20
+    ///
+    /// 16 now that the cells are narrow columns rather than squares: a column reads
+    /// its fill against its own height, and the strip gives back a third of its
+    /// height to the panel.
+    private static let stripHeight: CGFloat = 16
 
     /// Slot width, fixed rather than filling the row.
     ///
@@ -42,7 +49,11 @@ struct PanelCoreRow: View {
     /// panel out through both sides of the window. `slotWidth(sharedAcross:)` shrinks
     /// the slot until the widest cluster fits, and the caller hands the same answer to
     /// every row so the two clusters still draw their cores at one size.
-    static let preferredSlotWidth: CGFloat = 28
+    ///
+    /// 9, for columns about 6pt wide with a gap between, the way Activity Monitor
+    /// draws its cores. At 28 every cell was a square, and two rows of squares were
+    /// the heaviest shape in the panel.
+    static let preferredSlotWidth: CGFloat = 9
 
     /// Wider than the detail rows' 58pt column by the width of a second digit: an
     /// Ultra's "24 P-cores" was the one label in the panel that truncated.
@@ -56,6 +67,18 @@ struct PanelCoreRow: View {
     private static var stripBudget: CGFloat {
         CGFloat(PanelSettings.width) - 2 * Design.Space.panelInset
             - defaultLabelWidth - 4 * Design.Space.m - valueReserve
+    }
+
+    /// Label width when the two clusters share one line: "10 P-cores" and no more.
+    static let compactLabelWidth: CGFloat = 54
+
+    /// Whether two clusters of up to `widestCluster` cores fit side by side at the
+    /// preferred slot, each in half the content width.
+    static func fitsSideBySide(widestCluster: Int) -> Bool {
+        let half = (CGFloat(PanelSettings.width) - 2 * Design.Space.panelInset - Design.Space.xl) / 2
+        let needed = compactLabelWidth + 2 * Design.Space.m + valueReserve
+            + CGFloat(widestCluster) * preferredSlotWidth
+        return needed <= half
     }
 
     /// The slot every core row should use when the widest of them has `widestCluster`
@@ -75,11 +98,12 @@ struct PanelCoreRow: View {
             CoreGrid(cores: loads, tint: tint, height: Self.stripHeight,
                      showsClusterLabels: false)
                 .frame(width: CGFloat(loads.count) * slotWidth)
-            Spacer(minLength: Design.Space.m)
+                .frame(width: max(stripWidth ?? 0, CGFloat(loads.count) * slotWidth), alignment: .leading)
             Text(busy.map { formatter.percent($0) } ?? MetricFormatter.unavailable)
                 .font(Design.Text.value)
                 .foregroundStyle(Design.Palette.primaryText)
                 .fixedSize()
+            Spacer(minLength: 0)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(loads.count) \(label)")
@@ -252,17 +276,34 @@ enum PanelAppIcon {
     private static let cacheLimit = 512
 
     static func icon(for process: ProcessRow) -> PanelProcessIcon {
-        guard let path = process.executablePath else { return .executable }
-        if let cached = cache[path] { return cached }
+        guard let key = process.executablePath ?? process.bundleIdentifier else { return .executable }
+        if let cached = cache[key] { return cached }
         if cache.count >= cacheLimit { cache.removeAll(keepingCapacity: true) }
         let resolved: PanelProcessIcon
-        if let bundle = bundlePath(for: path), FileManager.default.fileExists(atPath: bundle) {
+        if let path = process.executablePath, let bundle = bundlePath(for: path),
+           FileManager.default.fileExists(atPath: bundle) {
             resolved = .bundle(NSWorkspace.shared.icon(forFile: bundle))
+        } else if let app = appURL(forBundleIdentifier: process.bundleIdentifier) {
+            resolved = .bundle(NSWorkspace.shared.icon(forFile: app.path))
         } else {
             resolved = .executable
         }
-        cache[path] = resolved
+        cache[key] = resolved
         return resolved
+    }
+
+    /// The app a helper's bundle identifier belongs to, trying it and then each
+    /// shorter prefix: "com.google.Chrome.helper.renderer" finds "com.google.Chrome".
+    /// Stops at two components, below which a prefix names a vendor, not an app.
+    private static func appURL(forBundleIdentifier identifier: String?) -> URL? {
+        guard var parts = identifier?.split(separator: ".").map(String.init) else { return nil }
+        while parts.count >= 3 {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: parts.joined(separator: ".")) {
+                return url
+            }
+            parts.removeLast()
+        }
+        return nil
     }
 
     /// The enclosing app bundle: "/Applications/Claude.app/Contents/Frameworks/Claude"
@@ -331,5 +372,88 @@ struct CopyableReadoutRow: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             withAnimation(.easeInOut(duration: 0.15)) { isCopied = false }
         }
+    }
+}
+
+// MARK: - Row sparkline
+
+/// The recent history of a summary row's value, small enough to sit beside its name.
+///
+/// No axis and no labels: the number beside it is the reading, and this only says
+/// whether it got there by climbing, falling or holding. One stroke and one faint
+/// fill from the samples the engine already keeps, rebuilt with the row.
+struct PanelSparkline: View {
+    let samples: SampleRing
+    let key: SeriesKey
+    var domain: ClosedRange<Double>?
+    let tint: Color
+
+    static let width: CGFloat = 40
+    static let height: CGFloat = 12
+
+    var body: some View {
+        GeometryReader { proxy in
+            let paths = Self.paths(samples, key: key, domain: domain, in: proxy.size)
+            ZStack {
+                PlotShape(paths.area).fill(tint.opacity(0.14))
+                PlotShape(paths.line)
+                    .stroke(tint, style: StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round))
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// At most one sample per half point of width, the newest at the right edge.
+    static func paths(_ samples: SampleRing, key: SeriesKey, domain: ClosedRange<Double>?,
+                      in size: CGSize) -> (line: Path, area: Path) {
+        var line = Path()
+        var area = Path()
+        let count = samples.count
+        guard count >= Design.Chart.minimumPoints, size.width > 1, size.height > 1 else {
+            return (line, area)
+        }
+        let stats = ChartStats(samples)
+        let scale = ChartScale.resolve(peak: stats.maximum, domain: domain,
+                                       naturalUpperBound: key.naturalUpperBound, adaptive: true)
+        let points = min(count, max(Int(size.width * 2), 2))
+        let inset: CGFloat = 1
+        let height = size.height - 2 * inset
+        var first = CGPoint.zero
+        var last = CGPoint.zero
+        for i in 0..<points {
+            let index = count - points + i
+            let value = Double(samples[index])
+            let fraction = min(max((value - scale.lowerBound) / scale.span, 0), 1)
+            let point = CGPoint(x: size.width * CGFloat(i) / CGFloat(points - 1),
+                                y: inset + height * (1 - CGFloat(fraction)))
+            if i == 0 { line.move(to: point); first = point } else { line.addLine(to: point) }
+            last = point
+        }
+        area.addPath(line)
+        area.addLine(to: CGPoint(x: last.x, y: size.height))
+        area.addLine(to: CGPoint(x: first.x, y: size.height))
+        area.closeSubpath()
+        return (line, area)
+    }
+}
+
+// MARK: - Section label
+
+/// The heading of a group inside an open module: "Using the most CPU", "Devices".
+/// One style for all of them, so a module's groups read as groups.
+struct PanelSectionLabel: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title)
+            .font(Design.Text.caption.weight(.medium))
+            .foregroundStyle(Design.Palette.tertiaryText)
+            .textCase(.uppercase)
+            .kerning(0.3)
+            .lineLimit(1)
+            .padding(.bottom, Design.Space.xxs)
+            .accessibilityAddTraits(.isHeader)
     }
 }

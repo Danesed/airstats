@@ -59,6 +59,7 @@ final class AppCoordinator {
         }
         panel.onRequestSettings = { [weak self] in self?.showSettings() }
         panel.onRequestQuit = { NSApp.terminate(nil) }
+        panel.onRequestActivityMonitor = { [weak self] tab in self?.openActivityMonitor(tab: tab) }
 
         desktopWidget.onVisibilityChange = { [weak self] visible in
             self?.engine.setDesktopWidgetVisible(visible)
@@ -184,11 +185,15 @@ final class AppCoordinator {
     /// it, so when Activity Monitor is already running the tab cannot be changed from
     /// outside and it is simply brought forward as the user left it.
     private func openActivityMonitor(for metric: MenuBarMetric?) {
+        openActivityMonitor(tab: metric?.activityMonitorTab)
+    }
+
+    private func openActivityMonitor(tab: Int?) {
         let bundleID = "com.apple.ActivityMonitor"
         let isRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
-        if let metric, !isRunning {
+        if let tab, !isRunning {
             CFPreferencesSetAppValue("SelectedTab" as CFString,
-                                     metric.activityMonitorTab as CFNumber,
+                                     tab as CFNumber,
                                      bundleID as CFString)
             CFPreferencesAppSynchronize(bundleID as CFString)
         }

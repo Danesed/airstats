@@ -394,6 +394,17 @@ public enum PanelModule: String, Sendable, Codable, CaseIterable, Equatable, Has
     }
 
     public var symbolName: String { requiredSource.symbolName }
+
+    /// The Activity Monitor tab that ranks processes by what this module measures.
+    public var activityMonitorTab: Int {
+        switch self {
+        case .cpu, .gpu, .thermal, .processes, .system: return 0
+        case .memory: return 1
+        case .battery: return 2
+        case .disk: return 3
+        case .network: return 4
+        }
+    }
 }
 
 /// What the panel remembers between openings.
@@ -413,6 +424,10 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var defaultHistoryRange: HistoryRange
     /// Highlight warning and critical metrics with orange and red tint in the panel.
     public var showsAlertColors: Bool
+    /// The order the user dragged the modules into. Empty until they first do, and
+    /// read through `visibleModules`, which drops what a newer build removed and
+    /// appends what it added, so a stored order never needs migrating.
+    public var moduleOrder: [PanelModule]
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -424,12 +439,14 @@ public struct PanelSettings: Sendable, Codable, Equatable {
 
     public init(collapsedModules: Set<PanelModule> = PanelSettings.defaultCollapsed,
                 showsHistoryChart: Bool = true,
-                defaultHistoryRange: HistoryRange = .day,
-                showsAlertColors: Bool = true) {
+                defaultHistoryRange: HistoryRange = .hour,
+                showsAlertColors: Bool = true,
+                moduleOrder: [PanelModule] = []) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
         self.defaultHistoryRange = defaultHistoryRange
         self.showsAlertColors = showsAlertColors
+        self.moduleOrder = moduleOrder
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -470,13 +487,27 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     /// one click from open.
     public static let defaultCollapsed: Set<PanelModule> = Set(PanelModule.allCases)
 
-    /// Every module, in declaration order. Was a stored order plus an enabled set;
-    /// with the ordering and toggling UI gone there is one canonical arrangement, and
-    /// a new release's modules appear without a stored order having to be migrated.
-    public var visibleModules: [PanelModule] { PanelModule.allCases }
+    /// Every module, in the user's order. Modules the stored order does not name, a
+    /// new release's or all of them before the first drag, follow in declaration order.
+    public var visibleModules: [PanelModule] {
+        var seen = Set<PanelModule>()
+        let ordered = moduleOrder.filter { seen.insert($0).inserted }
+        return ordered + PanelModule.allCases.filter { !seen.contains($0) }
+    }
+
+    /// The order after `module` is dropped onto `target`: it takes the target's place
+    /// and everything from there moves down one.
+    public func moduleOrder(moving module: PanelModule, before target: PanelModule) -> [PanelModule] {
+        guard module != target else { return visibleModules }
+        var order = visibleModules.filter { $0 != module }
+        let index = order.firstIndex(of: target) ?? order.endIndex
+        let movingDown = (visibleModules.firstIndex(of: module) ?? 0) < (visibleModules.firstIndex(of: target) ?? 0)
+        order.insert(module, at: movingDown ? min(index + 1, order.endIndex) : index)
+        return order
+    }
 
     private enum CodingKeys: String, CodingKey {
-        case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors
+        case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors, moduleOrder
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -486,8 +517,9 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         collapsedModules = Self.accordion(c.value(.collapsedModules, or: PanelSettings.defaultCollapsed))
         showsHistoryChart = c.value(.showsHistoryChart, or: true)
-        defaultHistoryRange = c.value(.defaultHistoryRange, or: .day)
+        defaultHistoryRange = c.value(.defaultHistoryRange, or: .hour)
         showsAlertColors = c.value(.showsAlertColors, or: true)
+        moduleOrder = c.value(.moduleOrder, or: [])
     }
 }
 

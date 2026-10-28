@@ -56,6 +56,13 @@ enum RenderCLI {
                 settings.desktopWidget.isCompact = false
             // Off by default, and the day silhouette is the tallest thing a widget
             // module can grow.
+            case "--range":
+                index += 1
+                guard let range = HistoryRange(rawValue: arguments[safe: index] ?? "") else {
+                    FileHandle.standardError.write(Data("--range wants recent, hour, day or month\n".utf8))
+                    exit(2)
+                }
+                settings.panel.defaultHistoryRange = range
             case "--history":
                 settings.desktopWidget.showsHistoryChart = true
             // A day still being collected is the state every launch starts in.

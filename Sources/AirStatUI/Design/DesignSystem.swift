@@ -38,6 +38,9 @@ public enum Design {
     public enum Text {
         /// Module headings: "CPU", "Memory".
         public static let sectionHeader = Font.system(size: 11, weight: .semibold)
+        /// A panel module's name on its summary row. A step lighter than the
+        /// number beside it, which is what the row is for.
+        public static let rowTitle = Font.system(size: 12, weight: .regular)
         /// Row labels: "Usage", "Pressure".
         public static let label = Font.system(size: 11, weight: .regular)
         /// Row values. Monospaced digits so a column of numbers does not shimmer as

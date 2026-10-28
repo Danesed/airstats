@@ -57,13 +57,33 @@ public struct PanelRootView: View {
                 }
                 PanelSeparator()
             }
+            PanelInsightRow(insight: insight, open: open)
+                .padding(.top, Design.Space.xs)
+            PanelSeparator()
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     let captionColumnWidth = captionColumnWidth
+                    let nameColumnWidth = nameColumnWidth
                     ForEach(Array(modules.enumerated()), id: \.element) { index, module in
                         if index > 0 { PanelSeparator(isVisible: separatorNeeded(before: index)) }
                         PanelModuleView(module: module, engine: engine, settings: settings,
-                                        layout: layout, captionColumnWidth: captionColumnWidth)
+                                        layout: layout, captionColumnWidth: captionColumnWidth,
+                                        nameColumnWidth: nameColumnWidth)
+                            .draggable(module.rawValue) {
+                                Label(module.label, systemImage: module.symbolName)
+                                    .font(Design.Text.rowTitle)
+                                    .padding(Design.Space.s)
+                            }
+                            .dropDestination(for: String.self) { items, _ in
+                                guard let raw = items.first, let dragged = PanelModule(rawValue: raw),
+                                      dragged != module else { return false }
+                                withAnimation(Design.Motion.respectingAccessibility(Design.Motion.disclosure)) {
+                                    settings.update { s in
+                                        s.panel.moduleOrder = s.panel.moduleOrder(moving: dragged, before: module)
+                                    }
+                                }
+                                return true
+                            }
                     }
                 }
                 .padding(.vertical, Design.Space.xs)
@@ -84,7 +104,7 @@ public struct PanelRootView: View {
             .scrollIndicators(.never)
             .defaultScrollAnchor(.top)
             PanelSeparator()
-            PanelFooterView()
+            PanelFooterView(isStale: engine.isStale, activityMonitorTab: openModule?.activityMonitorTab)
         }
         // The list takes whatever height the window has, and the rows sit at its top.
         //
@@ -110,6 +130,37 @@ public struct PanelRootView: View {
     @Environment(\.panelActions) private var actions
 
     private var modules: [PanelModule] { settings.settings.panel.visibleModules }
+
+    /// The module open now, which decides the tab Activity Monitor opens on.
+    private var openModule: PanelModule? {
+        let collapsed = layout?.collapsedModulesOverride ?? settings.settings.panel.collapsedModules
+        return modules.first { !collapsed.contains($0) }
+    }
+
+    private var insight: PanelInsight {
+        PanelInsight.make(modules: modules, engine: engine,
+                          formatter: MetricFormatter(settings: settings.settings.general))
+    }
+
+    /// Opens the module the insight is about, unless it already is.
+    private func open(_ module: PanelModule) {
+        let collapsed = layout?.collapsedModulesOverride ?? settings.settings.panel.collapsedModules
+        guard collapsed.contains(module) else { return }
+        if let toggle = layout?.toggleModule {
+            toggle(module)
+        } else {
+            settings.update { s in s.panel.collapsedModules = s.panel.collapsedModules(toggling: module) }
+        }
+    }
+
+    /// Wide enough for the longest module name, so every sparkline starts at one x.
+    private var nameColumnWidth: CGFloat {
+        let font = NSFont.systemFont(ofSize: 12)
+        let widest = modules.map {
+            ($0.label as NSString).size(withAttributes: [.font: font]).width
+        }.max() ?? 0
+        return ceil(widest)
+    }
 
     /// One width for every row's qualifier column, from the captions on screen now.
     private var captionColumnWidth: CGFloat {
@@ -219,13 +270,30 @@ struct PanelUpdateRow: View {
 }
 
 struct PanelFooterView: View {
+    /// The readings stopped arriving: the Mac just woke, or sampling is stuck. Said
+    /// in the footer rather than by greying the numbers, which reads as disabled.
+    var isStale = false
+    /// Where Activity Monitor should open, from the module the user is looking at.
+    var activityMonitorTab: Int?
+
     @Environment(\.panelActions) private var actions
 
     var body: some View {
         HStack(spacing: Design.Space.xs) {
             PanelFooterButton(title: "Settings…", symbol: "gearshape", action: actions.openSettings)
                 .keyboardShortcut(",", modifiers: .command)
-            Spacer(minLength: Design.Space.m)
+            Spacer(minLength: Design.Space.xs)
+            if isStale {
+                Text("Updating…")
+                    .font(Design.Text.caption)
+                    .foregroundStyle(Design.Palette.tertiaryText)
+                    .lineLimit(1)
+                Spacer(minLength: Design.Space.xs)
+            }
+            PanelFooterButton(title: "Activity Monitor", symbol: "list.bullet.rectangle") {
+                actions.openActivityMonitor(activityMonitorTab)
+            }
+            Spacer(minLength: Design.Space.xs)
             PanelFooterButton(title: "Quit", symbol: "power", action: actions.quit)
                 .keyboardShortcut("q", modifiers: .command)
         }

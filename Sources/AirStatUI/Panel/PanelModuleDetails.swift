@@ -77,6 +77,9 @@ extension PanelModuleView {
         section(engine.cpu) { cpu in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 coreClusters(cpu)
+                culprits("Using the most CPU", by: { $0.cpuPercent }) {
+                    formatter.unclampedPercent($0.cpuPercent)
+                }
                 PanelDetailGrid(entries: [
                     // The 1-minute load is already in the header caption; the grid
                     // adds the two slower averages instead of repeating it.
@@ -99,13 +102,27 @@ extension PanelModuleView {
                              busy: cpu.total.busy, tint: tint,
                              slotWidth: PanelCoreRow.slotWidth(sharedAcross: cpu.perCore.count))
             }
+        } else if PanelCoreRow.fitsSideBySide(widestCluster: max(efficiency.count, performance.count)) {
+            // One line for both clusters while they fit: the strip is the shape of
+            // the machine, and a second row added height without adding a reading.
+            HStack(spacing: Design.Space.xl) {
+                PanelCoreRow(label: "\(efficiency.count) E-cores", loads: efficiency,
+                             busy: cpu.efficiencyBusy, tint: tint,
+                             labelWidth: PanelCoreRow.compactLabelWidth)
+                PanelCoreRow(label: "\(performance.count) P-cores", loads: performance,
+                             busy: cpu.performanceBusy, tint: tint,
+                             labelWidth: PanelCoreRow.compactLabelWidth)
+            }
         } else {
-            let slot = PanelCoreRow.slotWidth(sharedAcross: max(efficiency.count, performance.count))
+            let widest = max(efficiency.count, performance.count)
+            let slot = PanelCoreRow.slotWidth(sharedAcross: widest)
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 PanelCoreRow(label: "\(efficiency.count) E-cores", loads: efficiency,
-                             busy: cpu.efficiencyBusy, tint: tint, slotWidth: slot)
+                             busy: cpu.efficiencyBusy, tint: tint, slotWidth: slot,
+                             stripWidth: CGFloat(widest) * slot)
                 PanelCoreRow(label: "\(performance.count) P-cores", loads: performance,
-                             busy: cpu.performanceBusy, tint: tint, slotWidth: slot)
+                             busy: cpu.performanceBusy, tint: tint, slotWidth: slot,
+                             stripWidth: CGFloat(widest) * slot)
             }
         }
     }
@@ -125,52 +142,48 @@ extension PanelModuleView {
                                       title: "Memory composition",
                                       barHeight: Design.Space.s, showsLegend: false)
                 PanelSegmentLegend(segments: segments, format: .memoryBytes)
+                culprits("Using the most memory", by: { Double($0.memoryBytes) }) {
+                    formatter.memory($0.memoryBytes)
+                }
                 PanelBarRow(label: "Pressure",
                             value: "\(memory.memoryPressure.label) (\(formatter.percent(memory.pressureFraction)))",
                             fraction: memory.pressureFraction,
-                            tint: pressureTint(for: memory))
+                            tint: tint)
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Used", formatter.memory(memory.usedBytes)),
                     PanelDetailEntry("Free", formatter.memory(memory.freeBytes)),
                     PanelDetailEntry("Swap", formatter.memory(memory.swapUsedBytes)),
                     PanelDetailEntry("Total", formatter.memory(memory.totalBytes)),
                 ])
-                memoryProcesses
                 history()
             }
         }
     }
 
-    private func pressureTint(for memory: MemorySnapshot) -> Color {
-        guard settings.settings.panel.showsAlertColors else { return metricColor }
-        if memory.memoryPressure == .critical || memory.pressureFraction >= 0.85 {
-            return Color.red
-        }
-        if memory.pressureFraction >= 0.70 {
-            return Color.orange
-        }
-        return metricColor
-    }
-
-    /// The biggest memory users, ranked here rather than in the Top Processes module
-    /// because that list answers "what is busy" and this one answers "where did the
-    /// memory go", and a user with 2 GB free is asking the second question.
+    /// The processes leading on one resource, under a label that says which.
+    ///
+    /// The question an open module raises is "what is doing this", so each module that
+    /// can answer it does, from the process list the panel already samples: three rows,
+    /// and none at all when nothing is using the resource, so an idle disk does not
+    /// list three processes at 0 B/s.
     @ViewBuilder
-    private var memoryProcesses: some View {
+    func culprits(_ title: String, count: Int = 3,
+                  by measure: @escaping (ProcessRow) -> Double,
+                  value: @escaping (ProcessRow) -> String) -> some View {
         if let processes = engine.processes.value {
             let ranked = processes.processes
-                .sorted { $0.memoryBytes > $1.memoryBytes }
-                .prefix(PanelSettings.processRowCount)
-            VStack(alignment: .leading, spacing: 0) {
-                Text("Top processes")
-                    .font(Design.Text.label)
-                    .foregroundStyle(Design.Palette.secondaryText)
-                    .padding(.bottom, Design.Space.xxs)
-                ForEach(Array(ranked)) { process in
-                    processRow(process, value: formatter.memory(process.memoryBytes))
+                .filter { measure($0) > 0 }
+                .sorted { measure($0) > measure($1) }
+                .prefix(count)
+            if !ranked.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    PanelSectionLabel(title)
+                    ForEach(Array(ranked)) { process in
+                        processRow(process, value: value(process))
+                    }
                 }
+                .padding(.top, Design.Space.xs)
             }
-            .padding(.top, Design.Space.s)
         }
     }
 
@@ -373,6 +386,9 @@ extension PanelModuleView {
                 ForEach(disk.volumes) { volume in
                     volumeRow(volume)
                 }
+                culprits("Reading and writing the most", by: diskTotal) {
+                    formatter.diskRate(diskTotal($0))
+                }
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Read", formatter.diskRate(disk.readBytesPerSecond)),
                     PanelDetailEntry("Write", formatter.diskRate(disk.writeBytesPerSecond)),
@@ -429,20 +445,57 @@ extension PanelModuleView {
         section(engine.power) { power in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 if power.hasBattery, let percentage = power.percentage {
-                    CapacityBar(fraction: percentage / 100, tint: tint)
+                    batteryOutlook(power, percentage: percentage)
                 }
                 if let adapter = adapterSummary(power) {
                     ReadoutRow("Adapter", adapter)
                 }
                 let entries = powerEntries(power)
                 if !entries.isEmpty { PanelDetailGrid(entries: entries) }
-                energyConsumers
-                ForEach(power.accessories) { accessory in
-                    accessoryRow(accessory)
+                culprits("Using significant energy",
+                         by: { ($0.energyImpact ?? 0) >= Self.significantWatts ? $0.energyImpact ?? 0 : 0 }) {
+                    formatter.watts($0.energyImpact, decimals: 2)
+                }
+                if !power.accessories.isEmpty {
+                    VStack(alignment: .leading, spacing: Design.Space.xs) {
+                        PanelSectionLabel("Devices")
+                        ForEach(power.accessories) { accessory in
+                            accessoryRow(accessory)
+                        }
+                    }
+                    .padding(.top, Design.Space.xs)
                 }
                 history(available: power.hasBattery && power.percentage != nil)
             }
         }
+    }
+
+    /// The answer the battery is opened for, how long, set larger than the rows under
+    /// it, with what the charger is doing beside it and the charge as a bar beneath.
+    private func batteryOutlook(_ power: PowerSnapshot, percentage: Double) -> some View {
+        let state = chargeState(power) ?? (power.isPluggedIn ? "On power adapter" : "On battery")
+        let outlook: String = {
+            if power.isCharging, let toFull = power.timeToFull { return "Full in " + formatter.duration(toFull) }
+            if !power.isPluggedIn, let toEmpty = power.timeToEmpty { return formatter.duration(toEmpty) + " left" }
+            return state
+        }()
+        return VStack(alignment: .leading, spacing: Design.Space.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
+                Text(outlook)
+                    .font(Design.Text.headline)
+                    .foregroundStyle(Design.Palette.primaryText)
+                    .lineLimit(1)
+                Spacer(minLength: Design.Space.s)
+                if outlook != state {
+                    Text(state)
+                        .font(Design.Text.caption)
+                        .foregroundStyle(Design.Palette.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+            CapacityBar(fraction: percentage / 100, tint: tint)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     /// Laid out like a disk volume, name over its bar, rather than as a bar row:
@@ -501,14 +554,6 @@ extension PanelModuleView {
     private func powerEntries(_ power: PowerSnapshot) -> [PanelDetailEntry] {
         guard power.hasBattery else { return [] }
         var entries: [PanelDetailEntry] = []
-        if let state = chargeState(power) {
-            entries.append(PanelDetailEntry("State", state))
-        }
-        if power.isCharging, let toFull = power.timeToFull {
-            entries.append(PanelDetailEntry("Full in", formatter.duration(toFull)))
-        } else if let toEmpty = power.timeToEmpty {
-            entries.append(PanelDetailEntry("Time left", formatter.duration(toEmpty)))
-        }
         if let health = power.healthPercent {
             entries.append(PanelDetailEntry("Health", formatter.percentValue(health)))
         }
@@ -533,37 +578,10 @@ extension PanelModuleView {
         return nil
     }
 
-    /// The processes drawing the most power, the question a falling battery raises.
-    /// Read from the process list the panel already samples, so it costs nothing of
-    /// its own, and present only while that list is: with the Top Processes module
-    /// off, the list is never read.
-    @ViewBuilder
-    private var energyConsumers: some View {
-        if let processes = engine.processes.value {
-            let ranked = processes.processes
-                .filter { ($0.energyImpact ?? 0) >= Self.significantWatts }
-                .sorted { ($0.energyImpact ?? 0) > ($1.energyImpact ?? 0) }
-                .prefix(Self.energyRowCount)
-            if !ranked.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Using significant energy")
-                        .font(Design.Text.label)
-                        .foregroundStyle(Design.Palette.secondaryText)
-                        .padding(.bottom, Design.Space.xxs)
-                    ForEach(Array(ranked)) { process in
-                        processRow(process, value: formatter.watts(process.energyImpact, decimals: 2))
-                    }
-                }
-                .padding(.top, Design.Space.s)
-            }
-        }
-    }
-
     /// Below a twentieth of a watt a process is background noise on Apple silicon, and
     /// listing it would make an idle machine look busy. Measured, not guessed: an
     /// editor helper at 45% of an efficiency core drew 0.10 W.
     static let significantWatts = 0.05
-    static let energyRowCount = 5
 
     // MARK: Thermal
 
@@ -668,6 +686,18 @@ extension PanelModuleView {
                 Label("Force Quit (SIGKILL)", systemImage: "bolt.circle")
             }
             Divider()
+            Button {
+                actions.openActivityMonitor(module.activityMonitorTab)
+            } label: {
+                Label("Show in Activity Monitor", systemImage: "list.bullet.rectangle")
+            }
+            if let path = process.executablePath {
+                Button {
+                    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+                } label: {
+                    Label("Show in Finder", systemImage: "folder")
+                }
+            }
             Button {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString("\(process.pid)", forType: .string)

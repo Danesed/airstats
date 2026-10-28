@@ -42,8 +42,11 @@ struct PanelModuleView: View {
     /// Width of the qualifier column beside the headline value, shared by every row so
     /// the numbers keep one right edge. See `PanelSummary.captionColumnWidth(for:)`.
     var captionColumnWidth: CGFloat
+    /// Width of the name column, shared so every sparkline starts at one x.
+    var nameColumnWidth: CGFloat = 80
 
     @State private var isHovering = false
+    @Environment(\.panelActions) var actions
     /// Which window the module's history chart shows, once the user has picked one.
     /// View state rather than a setting: it is a glance choice, and it resets with
     /// the panel. Nil lets the chart choose by how much of the day exists.
@@ -76,32 +79,21 @@ struct PanelModuleView: View {
         return Design.Palette.defaultMetric(module.requiredSource)
     }
 
-    var tint: Color {
-        if settings.settings.panel.showsAlertColors && alertLevel != .none {
-            return alertLevel == .critical ? Color.red : Color.orange
-        }
-        return metricColor
-    }
+    /// Bars, cores and charts keep the metric's own colour whatever the reading.
+    /// Alert colour lands on the headline number and the dot beside the glyph only:
+    /// when every part of a busy module turned red, six modules under load were a
+    /// wall of red and the one that mattered did not stand out.
+    var tint: Color { metricColor }
 
     var barTint: Color { tint }
 
-    /// The history chart stays a step quieter than the bars: a stroked line reads at
-    /// secondary weight where a filled bar does not.
     var chartTint: Color { tint }
 
     /// The low-to-high band of the history chart, under its mean line.
     var bandTint: Color { tint.opacity(0.15) }
 
-    /// A module glyph takes the metric color from Appearance, or alert color when warning/critical.
-    private var iconColor: Color {
-        if settings.settings.panel.showsAlertColors {
-            switch alertLevel {
-            case .critical: return Color.red
-            case .warning: return Color.orange
-            case .none: break
-            }
-        }
-        return metricColor
+    var alertLevel: PanelAlertLevel {
+        settings.settings.panel.showsAlertColors ? PanelAlert.level(for: module, engine: engine) : .none
     }
 
     /// Reserved width for the process list's value column, sized for the widest
@@ -139,12 +131,17 @@ struct PanelModuleView: View {
                 // column of content.
                 Image(systemName: summary.icon ?? module.symbolName)
                     .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(iconColor)
+                    .foregroundStyle(metricColor)
                     .frame(width: Design.Space.xl)
+                    .overlay(alignment: .topTrailing) { alertDot }
+                // The name is what the row is, the number is what it says: the name
+                // steps back in weight and colour so the eye lands on the number.
                 Text(module.label)
-                    .font(Design.Text.sectionHeader)
+                    .font(Design.Text.rowTitle)
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
+                    .frame(width: nameColumnWidth, alignment: .leading)
+                sparkline
                 Spacer(minLength: Design.Space.s)
                 headlineValue
                     // The number outranks the gap in front of it: without this the
@@ -164,8 +161,42 @@ struct PanelModuleView: View {
             }
         }
         .accessibilityLabel(module.label)
-        .accessibilityValue([summary.leadValue, summary.value].compactMap { $0 }.joined(separator: ", "))
+        .accessibilityValue([summary.leadValue, summary.value, alertLevel == .none ? nil : "needs attention"]
+            .compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint(isExpanded ? "Collapse" : "Expand")
+    }
+
+    /// Marks the glyph of a module whose reading is in alert colour, so the row is
+    /// found by shape as well as by hue.
+    @ViewBuilder
+    private var alertDot: some View {
+        if let color = alertLevel.color {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+                .offset(x: 2, y: -1)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// The last few minutes of the headline value, in the row itself. Neutral even in
+    /// alert, where the number and the dot already carry the colour. Absent while the
+    /// module is open, where the full chart says the same thing larger, and for the
+    /// modules that keep no series.
+    @ViewBuilder
+    private var sparkline: some View {
+        if !isExpanded, let series = module.historySeries {
+            PanelSparkline(samples: engine.history[series.key], key: series.key,
+                           domain: series.domain,
+                           tint: Design.Palette.secondaryText)
+                .frame(minWidth: 0, idealWidth: PanelSparkline.width, maxWidth: PanelSparkline.width)
+                .frame(height: PanelSparkline.height)
+        } else {
+            Color.clear
+                .frame(minWidth: 0, idealWidth: PanelSparkline.width, maxWidth: PanelSparkline.width)
+                .frame(height: 1)
+                .accessibilityHidden(true)
+        }
     }
 
     private var isKeyboardFocused: Bool {
@@ -221,7 +252,7 @@ struct PanelModuleView: View {
                     if let caption = summary.caption, !caption.isEmpty {
                         Text(caption)
                             .font(Design.Text.caption)
-                            .foregroundStyle(Design.Palette.tertiaryText)
+                            .foregroundStyle(Design.Palette.secondaryText)
                             .lineLimit(1)
                             .frame(width: captionColumnWidth, alignment: .leading)
                     } else if summary.leadValue == nil {
@@ -252,74 +283,8 @@ struct PanelModuleView: View {
         }
     }
 
-    private enum ModuleAlertLevel {
-        case none, warning, critical
-    }
-
-    private var alertLevel: ModuleAlertLevel {
-        switch module {
-        case .cpu:
-            if let cpu = engine.cpu.value {
-                let busy = cpu.total.busy
-                let cores = Double(ProcessInfo.processInfo.activeProcessorCount)
-                let highLoad = cpu.loadAverage.one >= cores
-                if busy >= 0.90 || (highLoad && busy >= 0.75) { return .critical }
-                if busy >= 0.65 || highLoad { return .warning }
-            }
-        case .memory:
-            if let memory = engine.memory.value {
-                let ramUsed = memory.usedFraction
-                if memory.memoryPressure == .critical || memory.pressureFraction >= 0.85 || ramUsed >= 0.90 {
-                    return .critical
-                }
-                if ramUsed >= 0.75 || memory.pressureFraction >= 0.70 {
-                    return .warning
-                }
-            }
-        case .thermal:
-            if let thermal = engine.thermal.value {
-                let temp = thermal.cpuCelsius ?? 0
-                if thermal.pressure == .critical || temp >= 85 {
-                    return .critical
-                }
-                if thermal.pressure == .serious || thermal.pressure == .fair || temp >= 65 {
-                    return .warning
-                }
-            }
-        case .battery:
-            if let power = engine.power.value, !power.isPluggedIn, let pct = power.percentage {
-                if pct <= 10 { return .critical }
-                if pct <= 20 { return .warning }
-            }
-        case .disk:
-            if let root = engine.disk.value?.rootVolume {
-                if root.usedFraction >= 0.90 { return .critical }
-                if root.usedFraction >= 0.75 { return .warning }
-            }
-        case .gpu:
-            if let gpu = engine.gpu.value?.primary {
-                let util = gpu.utilization ?? 0
-                let vramFraction = (gpu.vramTotalBytes ?? 0) > 0
-                    ? Double(gpu.vramUsedBytes ?? 0) / Double(gpu.vramTotalBytes!)
-                    : 0
-                if util >= 0.90 || vramFraction >= 0.95 { return .critical }
-                if util >= 0.75 || vramFraction >= 0.85 { return .warning }
-            }
-        default:
-            break
-        }
-        return .none
-    }
-
     private var headlineColor: Color {
-        guard settings.settings.panel.showsAlertColors else {
-            return Design.Palette.primaryText
-        }
-        switch alertLevel {
-        case .none: return Design.Palette.primaryText
-        case .warning: return Color.orange
-        case .critical: return Color.red
-        }
+        alertLevel.color ?? Design.Palette.primaryText
     }
 
     private func toggleCollapsed() {
@@ -356,16 +321,8 @@ extension PanelSummary {
                                 caption: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
         case .memory:
             guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
-            let usedStr = formatter.memory(memory.usedBytes)
-            let totalStr = formatter.memory(memory.totalBytes)
-            let ramValue: String
-            let usedParts = usedStr.components(separatedBy: " ")
-            let totalParts = totalStr.components(separatedBy: " ")
-            if usedParts.count == 2 && totalParts.count == 2 && usedParts[1] == totalParts[1] {
-                ramValue = "\(usedParts[0])/\(totalParts[0]) \(totalParts[1])"
-            } else {
-                ramValue = "\(usedStr)/\(totalStr)"
-            }
+            let ramValue = Self.usedOfTotal(Double(memory.usedBytes), Double(memory.totalBytes),
+                                            formatter: formatter)
             return PanelSummary(value: ramValue,
                                 caption: "pressure " + formatter.percent(memory.pressureFraction))
         case .gpu:
@@ -373,20 +330,9 @@ extension PanelSummary {
             guard let device = gpu.primary else { return PanelSummary() }
             let utilCaption = device.utilization.map { "util " + formatter.percent($0) }
             if let used = device.vramUsedBytes {
-                let usedStr = formatter.memory(used)
-                let vramValue: String
-                if let total = device.vramTotalBytes, total > 0 {
-                    let totalStr = formatter.memory(total)
-                    let usedParts = usedStr.components(separatedBy: " ")
-                    let totalParts = totalStr.components(separatedBy: " ")
-                    if usedParts.count == 2 && totalParts.count == 2 && usedParts[1] == totalParts[1] {
-                        vramValue = "\(usedParts[0])/\(totalParts[0]) \(totalParts[1])"
-                    } else {
-                        vramValue = "\(usedStr)/\(totalStr)"
-                    }
-                } else {
-                    vramValue = usedStr
-                }
+                let vramValue = device.vramTotalBytes.flatMap { $0 > 0 ? $0 : nil }
+                    .map { Self.usedOfTotal(Double(used), Double($0), formatter: formatter) }
+                    ?? formatter.memory(used)
                 return PanelSummary(value: vramValue, caption: utilCaption)
             }
             guard let utilization = device.utilization else {
@@ -454,6 +400,21 @@ extension PanelSummary {
             guard let system = engine.system.value else { return warmup(for: engine.system) }
             return PanelSummary(value: formatter.uptime(system.uptime), caption: "uptime")
         }
+    }
+
+    /// "1.0/13 GB": both figures in the total's unit.
+    ///
+    /// Formatted separately, 1006 MB of 13 GB read "1006 MB/13 GB", which is wider
+    /// than any other headline and asks the reader to convert before comparing.
+    static func usedOfTotal(_ used: Double, _ total: Double, formatter: MetricFormatter) -> String {
+        let totalText = formatter.memory(total)
+        guard total > 0, let unit = totalText.split(separator: " ").last,
+              let exponent = ["B", "KB", "MB", "GB", "TB", "PB"].firstIndex(of: String(unit)) else {
+            return "\(formatter.memory(used))/\(totalText)"
+        }
+        let usedNumber = used / pow(1024, Double(exponent))
+        let usedText = formatter.fixed(usedNumber, decimals: usedNumber < 10 && exponent > 0 ? 1 : 0)
+        return "\(usedText)/\(totalText)"
     }
 
     /// The stand-in while a metric has never sampled: "Collecting…" in the

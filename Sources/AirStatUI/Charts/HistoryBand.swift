@@ -105,6 +105,14 @@ struct BandPlot {
         self.columns = out
     }
 
+    /// Columns already cut, for tests.
+    init(rect: CGRect, scale: ChartScale, columns: [BandColumn?]) {
+        self.rect = rect
+        self.scale = scale
+        self.columns = columns
+        self.sourceCount = columns.count
+    }
+
     /// One column per point of width at most, and never more columns than samples.
     private static func columnCount(for width: CGFloat, samples: Int) -> Int {
         Swift.max(2, Swift.min(Int(width.rounded(.up)), Swift.max(samples, 2)))
@@ -211,6 +219,34 @@ struct BandPlot {
             path.addPath(ChartLayout.marker(at: CGPoint(x: x(newest), y: y(column.high))))
         }
         return path
+    }
+
+    /// Stretches with nothing sampled that have samples on both sides: the Mac was
+    /// asleep or AirStats was not running. The stretch before the first sample is
+    /// not one of them, it is a day still being collected.
+    var interiorGaps: [Range<Int>] {
+        let runs = self.runs
+        guard runs.count > 1 else { return [] }
+        return zip(runs, runs.dropFirst()).map { $0.upperBound..<$1.lowerBound }
+    }
+
+    /// A rectangle per interior gap, edge to edge between the columns either side.
+    func gapPath() -> Path {
+        var path = Path()
+        for gap in interiorGaps {
+            let left = x(gap.lowerBound - 1)
+            let right = x(gap.upperBound)
+            path.addRect(CGRect(x: left, y: rect.minY, width: right - left, height: rect.height))
+        }
+        return path
+    }
+
+    /// The widest interior gap, for its label.
+    var widestGapRect: CGRect? {
+        interiorGaps.map { gap -> CGRect in
+            let left = x(gap.lowerBound - 1)
+            return CGRect(x: left, y: rect.minY, width: x(gap.upperBound) - left, height: rect.height)
+        }.max { $0.width < $1.width }
     }
 
     /// The newest sampled column, where the "now" marker sits.

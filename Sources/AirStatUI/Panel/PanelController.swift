@@ -14,6 +14,8 @@ public final class PanelController: NSObject, NSWindowDelegate {
     public var onVisibilityChange: ((Bool) -> Void)?
     public var onRequestSettings: (() -> Void)?
     public var onRequestQuit: (() -> Void)?
+    /// Opens Activity Monitor on the given tab (0 CPU … 4 Network), or as it was left.
+    public var onRequestActivityMonitor: ((Int?) -> Void)?
 
     private let engine: MetricsEngine
     private let settings: SettingsStore
@@ -197,6 +199,10 @@ public final class PanelController: NSObject, NSWindowDelegate {
             .environment(\.panelActions, PanelActions(
                 openSettings: { [weak self] in self?.onRequestSettings?() },
                 quit: { [weak self] in self?.onRequestQuit?() },
+                openActivityMonitor: { [weak self] tab in
+                    self?.hide()
+                    self?.onRequestActivityMonitor?(tab)
+                },
                 dismiss: { [weak self] in self?.hide() }
             ))
         // The window tracks its content's height, so collapsing a module or ejecting a
@@ -556,7 +562,12 @@ public final class PanelController: NSObject, NSWindowDelegate {
                 Task { @MainActor in self.toggleFocusedModule() }
                 return nil
             default:
-                return event
+                // 1 to 9 jump to that module and open it.
+                guard event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting(.numericPad).isEmpty,
+                      let digit = event.charactersIgnoringModifiers.flatMap(Int.init),
+                      (1...9).contains(digit) else { return event }
+                Task { @MainActor in self.jump(to: digit - 1) }
+                return nil
             }
         }) {
             monitors.append(escape)
@@ -600,6 +611,16 @@ public final class PanelController: NSObject, NSWindowDelegate {
         }
         let nextIndex = min(max(index + delta, 0), visible.count - 1)
         layout?.focusedModule = visible[nextIndex]
+    }
+
+    private func jump(to index: Int) {
+        let visible = settings.settings.panel.visibleModules
+        guard visible.indices.contains(index) else { return }
+        let module = visible[index]
+        layout?.focusedModule = module
+        if settings.settings.panel.collapsedModules.contains(module) {
+            toggleModule(module)
+        }
     }
 
     private func toggleFocusedModule() {
@@ -668,13 +689,16 @@ final class PanelWindow: NSPanel {
 public struct PanelActions {
     public var openSettings: @MainActor () -> Void
     public var quit: @MainActor () -> Void
+    public var openActivityMonitor: @MainActor (Int?) -> Void
     public var dismiss: @MainActor () -> Void
 
     public init(openSettings: @escaping @MainActor () -> Void = {},
                 quit: @escaping @MainActor () -> Void = {},
+                openActivityMonitor: @escaping @MainActor (Int?) -> Void = { _ in },
                 dismiss: @escaping @MainActor () -> Void = {}) {
         self.openSettings = openSettings
         self.quit = quit
+        self.openActivityMonitor = openActivityMonitor
         self.dismiss = dismiss
     }
 }

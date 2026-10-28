@@ -337,6 +337,7 @@ public struct HistoryChart: View {
                     if let shade, shade.straddles(Self.shadeThreshold) {
                         ShadeLayer(plot: shade)
                     }
+                    GapLayer(plot: plot)
                     if ChartSettings.showsGrid {
                         PlotShape(plot.gridPath(marks: HistoryAxis.marks))
                             .stroke(Design.Palette.primaryText.opacity(Design.Chart.gridOpacity),
@@ -664,6 +665,49 @@ struct SecondaryLayer: View {
                 .stroke(tint.opacity(0.55), style: StrokeStyle(lineWidth: Self.lineWidth,
                                                               lineCap: .round, lineJoin: .round))
         }
+    }
+}
+
+/// Where nothing was sampled between two stretches that were, drawn as a hatched
+/// band with "no data" on the widest one. A bare break in the line read as a fault in
+/// the chart; this reads as time the app was not watching.
+struct GapLayer: View {
+    let plot: BandPlot
+
+    /// Narrower than this, the label does not fit and the hatching says it alone.
+    static let labelWidth: CGFloat = 44
+
+    var body: some View {
+        let gaps = plot.gapPath()
+        if !gaps.isEmpty {
+            ZStack {
+                PlotShape(gaps).fill(Design.Palette.primaryText.opacity(0.04))
+                PlotShape(Self.hatching(in: plot.rect))
+                    .stroke(Design.Palette.primaryText.opacity(0.10), lineWidth: Design.Space.hairline)
+                    .clipShape(PlotShape(gaps))
+                if let widest = plot.widestGapRect, widest.width >= Self.labelWidth {
+                    Text("no data")
+                        .font(Design.Text.micro)
+                        .foregroundStyle(Design.Palette.tertiaryText)
+                        .fixedSize()
+                        .position(x: widest.midX, y: widest.midY)
+                }
+            }
+            .accessibilityHidden(true)
+        }
+    }
+
+    /// Diagonals every 5 points across the whole plot, clipped to the gaps after.
+    static func hatching(in rect: CGRect) -> Path {
+        var path = Path()
+        let step: CGFloat = 5
+        var x = rect.minX - rect.height
+        while x < rect.maxX {
+            path.move(to: CGPoint(x: x, y: rect.maxY))
+            path.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+            x += step
+        }
+        return path
     }
 }
 
