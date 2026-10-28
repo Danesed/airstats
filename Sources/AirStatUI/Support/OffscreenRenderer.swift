@@ -276,6 +276,9 @@ private struct PanelPreviewHost: View {
         // which draws nothing offscreen. The sheen over it is the one the window used
         // before Liquid Glass, so the glass edge at least renders here.
         PanelRootView(engine: PreviewEngine.make(request), settings: PreviewEngine.store(request))
+            // `AIRSTATS_RENDER_TAB=today` renders the Today tab.
+            .environment(\.panelInitialTab,
+                         ProcessInfo.processInfo.environment["AIRSTATS_RENDER_TAB"] == "today" ? .today : .now)
             .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
                                                   style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))

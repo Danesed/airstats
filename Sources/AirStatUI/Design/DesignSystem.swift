@@ -46,6 +46,8 @@ public enum Design {
         /// Row values. Monospaced digits so a column of numbers does not shimmer as
         /// digits change width — the single most visible cheapness tell in a stats app.
         public static let value = Font.system(size: 11, weight: .medium).monospacedDigit()
+        /// An open module's headline: the reading it was opened for, set large.
+        public static let openHeadline = Font.system(size: 20, weight: .semibold).monospacedDigit()
         /// The one large number at the top of a module.
         public static let headline = Font.system(size: 13, weight: .semibold).monospacedDigit()
         /// The desktop widget's headline. The panel's 20pt does not fit a 220pt window that
@@ -108,6 +110,15 @@ public enum Design {
                 appearance.isDark ? NSColor(white: 0.92, alpha: 1.0) : NSColor(white: 0.3, alpha: 1.0)
             })
         }
+
+        /// A card inside the panel: a step off the glass in either appearance.
+        public static let cardFill = Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.isDark ? NSColor(white: 1, alpha: 0.055) : NSColor(white: 1, alpha: 0.55)
+        })
+        /// The card's rim, lighter than a separator so it reads as an edge, not a rule.
+        public static let cardRim = Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.isDark ? NSColor(white: 1, alpha: 0.08) : NSColor(white: 0, alpha: 0.06)
+        })
 
         /// Track behind bars, rings and gauges.
         ///

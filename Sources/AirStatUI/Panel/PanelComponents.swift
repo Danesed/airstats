@@ -214,32 +214,61 @@ struct PanelDetailEntry: Identifiable, Equatable {
     }
 }
 
-/// Supporting detail in two columns. The panel is 340pt wide and a readout needs
-/// about half of that, so pairing them halves the height of every module.
+/// Supporting detail as small tiles, three to a row: the label over the value.
+///
+/// A label and a value side by side in half the panel left both ends of every row
+/// apart, and four of them read as a form. Stacked in a tile, each figure is one
+/// object the eye picks up at once, and a row of three costs no more height.
 struct PanelDetailGrid: View {
     let entries: [PanelDetailEntry]
 
+    /// Three to a row, or four when there are exactly four: three and one left a
+    /// lone tile under a full row.
+    private var columns: Int { entries.count == 4 ? 4 : 3 }
+
     var body: some View {
         Grid(alignment: .leading,
-             horizontalSpacing: Design.Space.xl,
-             verticalSpacing: Design.Space.xxs) {
+             horizontalSpacing: Design.Space.s,
+             verticalSpacing: Design.Space.s) {
             ForEach(rows, id: \.first?.id) { row in
                 GridRow {
                     ForEach(row) { entry in
-                        ReadoutRow(entry.label, entry.value)
-                            .frame(maxWidth: .infinity)
+                        tile(entry)
                     }
-                    // Keeps a trailing odd entry in the left column instead of
-                    // letting it stretch across both.
-                    if row.count == 1 { Color.clear.frame(height: 0) }
+                    // Keeps the last row's tiles the width of the rows above.
+                    ForEach(row.count..<columns, id: \.self) { _ in
+                        Color.clear.frame(height: 0)
+                    }
                 }
             }
         }
     }
 
+    private func tile(_ entry: PanelDetailEntry) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(entry.label)
+                .font(Design.Text.micro.weight(.medium))
+                .foregroundStyle(Design.Palette.tertiaryText)
+                .textCase(.uppercase)
+                .lineLimit(1)
+            Text(entry.value)
+                .font(Design.Text.headline)
+                .foregroundStyle(Design.Palette.primaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Design.Space.m)
+        .padding(.vertical, Design.Space.xs)
+        .background(RoundedRectangle(cornerRadius: Design.Radius.control + 1, style: .continuous)
+            .fill(Design.Palette.cardFill))
+        .accessibilityElement(children: .combine)
+    }
+
     private var rows: [[PanelDetailEntry]] {
-        stride(from: 0, to: entries.count, by: 2).map { start in
-            Array(entries[start..<min(start + 2, entries.count)])
+        stride(from: 0, to: entries.count, by: columns).map { start in
+            Array(entries[start..<min(start + columns, entries.count)])
         }
     }
 }

@@ -77,7 +77,9 @@ extension PanelModuleView {
         section(engine.cpu) { cpu in
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 coreClusters(cpu)
-                culprits("Using the most CPU", by: { $0.cpuPercent }) {
+                // No share: a process at 412% is "4% of the machine", which reads as
+                // a contradiction beside the number it qualifies.
+                culprits("Using the most CPU", showsShare: false, by: { $0.cpuPercent }) {
                     formatter.unclampedPercent($0.cpuPercent)
                 }
                 PanelDetailGrid(entries: [
@@ -136,13 +138,14 @@ extension PanelModuleView {
 
     private var memoryDetail: some View {
         section(engine.memory) { memory in
-            let segments = Self.readableSegments(CompositionSegment.memory(memory))
+            let segments = CompositionSegment.memory(memory)
             VStack(alignment: .leading, spacing: Design.Space.xs) {
                 StackedCompositionBar(segments, format: .memoryBytes,
                                       title: "Memory composition",
-                                      barHeight: Design.Space.s, showsLegend: false)
+                                      barHeight: Design.Space.m, showsLegend: false)
                 PanelSegmentLegend(segments: segments, format: .memoryBytes)
-                culprits("Using the most memory", by: { Double($0.memoryBytes) }) {
+                culprits("Using the most memory", total: Double(memory.totalBytes),
+                         by: { Double($0.memoryBytes) }) {
                     formatter.memory($0.memoryBytes)
                 }
                 PanelBarRow(label: "Pressure",
@@ -168,6 +171,7 @@ extension PanelModuleView {
     /// list three processes at 0 B/s.
     @ViewBuilder
     func culprits(_ title: String, count: Int = 3,
+                  total: Double? = nil, showsShare: Bool = true,
                   by measure: @escaping (ProcessRow) -> Double,
                   value: @escaping (ProcessRow) -> String) -> some View {
         if let processes = engine.processes.value {
@@ -175,40 +179,21 @@ extension PanelModuleView {
                 .filter { measure($0) > 0 }
                 .sorted { measure($0) > measure($1) }
                 .prefix(count)
-            if !ranked.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
+            if let top = ranked.first.map(measure), top > 0 {
+                // The share is of the whole (all RAM, every core, every process's
+                // traffic); the fill is against the leader, so the first row is full
+                // and the rest read as fractions of it.
+                let whole = total ?? processes.processes.reduce(0) { $0 + max(measure($1), 0) }
+                VStack(alignment: .leading, spacing: Design.Space.xxs + 1) {
                     PanelSectionLabel(title)
                     ForEach(Array(ranked)) { process in
-                        processRow(process, value: value(process))
+                        let amount = measure(process)
+                        processRow(process, value: value(process), fill: amount / top,
+                                   share: showsShare && whole > 0 ? formatter.percent(amount / whole) : nil)
                     }
                 }
                 .padding(.top, Design.Space.xs)
             }
-        }
-    }
-
-    /// Composition shades, re-tinted so every segment can actually be read.
-    ///
-    /// Measured against a light panel: `systemGreen` itself is 1.97:1, so the metric
-    /// hue cannot carry a segment no matter how the segments are ordered, and
-    /// `ChartPalette.composition` ramps down to 28% opacity, which is fainter still.
-    /// Apple's system hues are all in that range in light mode, so "use distinct hues"
-    /// cannot meet a 3:1 bar either. Four compressed steps of the label colour can:
-    /// they land at 13.7, 8.9, 5.8 and 3.9:1, roughly 30 RGB apart from each other, and
-    /// the palest still reads against the track.
-    private static let compositionShades: [Double] = [1.0, 0.85, 0.70, 0.55]
-
-    private static func readableSegments(_ segments: [CompositionSegment]) -> [CompositionSegment] {
-        var index = 0
-        return segments.map { segment in
-            guard !segment.isRemainder else { return segment }
-            defer { index += 1 }
-            let shade = compositionShades[min(index, compositionShades.count - 1)]
-            return CompositionSegment(id: segment.id, label: segment.label,
-                                      shortLabel: segment.shortLabel,
-                                      value: segment.value,
-                                      tint: Design.Palette.primaryText.opacity(shade),
-                                      isRemainder: false)
         }
     }
 
@@ -656,7 +641,10 @@ extension PanelModuleView {
         (process.diskReadBytesPerSecond ?? 0) + (process.diskWriteBytesPerSecond ?? 0)
     }
 
-    private func processRow(_ process: ProcessRow, value: String) -> some View {
+    /// A process as a gauge: the row itself fills to `fill`, so how much one app
+    /// dominates is a length before it is a number.
+    private func processRow(_ process: ProcessRow, value: String, fill: Double? = nil,
+                            share: String? = nil) -> some View {
         HStack(spacing: Design.Space.s) {
             processIcon(process)
             Text(process.name)
@@ -665,11 +653,32 @@ extension PanelModuleView {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: Design.Space.m)
+            if let share {
+                Text(share)
+                    .font(Design.Text.caption.monospacedDigit())
+                    .foregroundStyle(Design.Palette.tertiaryText)
+                    .lineLimit(1)
+            }
             Text(value)
                 .font(Design.Text.value)
                 .foregroundStyle(Design.Palette.primaryText)
                 .lineLimit(1)
                 .frame(width: PanelModuleView.processValueWidth, alignment: .trailing)
+        }
+        .padding(.horizontal, fill == nil ? 0 : Design.Space.s)
+        .frame(height: fill == nil ? nil : 22)
+        .background {
+            if let fill {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                            .fill(Design.Palette.cardFill)
+                        RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                            .fill(Design.Palette.primaryText.opacity(0.10))
+                            .frame(width: proxy.size.width * CGFloat(min(max(fill, 0), 1)))
+                    }
+                }
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(process.name)

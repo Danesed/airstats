@@ -57,36 +57,50 @@ public struct PanelRootView: View {
                 }
                 PanelSeparator()
             }
-            PanelInsightRow(insight: insight, open: open)
-                .padding(.top, Design.Space.xs)
-            PanelSeparator()
+            if settings.settings.panel.showsToday {
+                Picker("View", selection: tab) {
+                    Text("Now").tag(PanelTab.now)
+                    Text("Today").tag(PanelTab.today)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 160)
+                .frame(maxWidth: .infinity)
+                .padding(.top, Design.Space.m)
+            }
+            if shownTab == .now {
+                PanelInsightRow(insight: insight, open: open)
+                    .padding(.horizontal, Design.Space.s)
+                    .padding(.top, Design.Space.s)
+            }
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    let captionColumnWidth = captionColumnWidth
-                    let nameColumnWidth = nameColumnWidth
-                    ForEach(Array(modules.enumerated()), id: \.element) { index, module in
-                        if index > 0 { PanelSeparator(isVisible: separatorNeeded(before: index)) }
-                        PanelModuleView(module: module, engine: engine, settings: settings,
-                                        layout: layout, captionColumnWidth: captionColumnWidth,
-                                        nameColumnWidth: nameColumnWidth)
-                            .draggable(module.rawValue) {
-                                Label(module.label, systemImage: module.symbolName)
-                                    .font(Design.Text.rowTitle)
-                                    .padding(Design.Space.s)
-                            }
-                            .dropDestination(for: String.self) { items, _ in
-                                guard let raw = items.first, let dragged = PanelModule(rawValue: raw),
-                                      dragged != module else { return false }
-                                withAnimation(Design.Motion.respectingAccessibility(Design.Motion.disclosure)) {
-                                    settings.update { s in
-                                        s.panel.moduleOrder = s.panel.moduleOrder(moving: dragged, before: module)
-                                    }
+                    if shownTab == .today {
+                        PanelTodayCard(engine: engine, settings: settings) { module in
+                            pickedTab = .now
+                            open(module)
+                        }
+                        .panelCard()
+                        .padding(.top, Design.Space.s)
+                    } else {
+                        let captionColumnWidth = captionColumnWidth
+                        let nameColumnWidth = nameColumnWidth
+                        ForEach(PanelGroup.arrange(modules), id: \.group) { entry in
+                            PanelGroupLabel(entry.group.title)
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(Array(entry.modules.enumerated()), id: \.element) { index, module in
+                                    if index > 0 { PanelSeparator() }
+                                    moduleView(module, captionColumnWidth: captionColumnWidth,
+                                               nameColumnWidth: nameColumnWidth)
                                 }
-                                return true
                             }
+                            .padding(.vertical, Design.Space.xxs)
+                            .panelCard()
+                        }
                     }
                 }
-                .padding(.vertical, Design.Space.xs)
+                .padding(.bottom, Design.Space.s)
             }
             .scrollBounceBehavior(.basedOnSize)
             // No indicator, ever.
@@ -128,6 +142,39 @@ public struct PanelRootView: View {
     }
 
     @Environment(\.panelActions) private var actions
+    @State private var pickedTab: PanelTab?
+    @Environment(\.panelInitialTab) private var initialTab
+
+    private var tab: Binding<PanelTab> {
+        Binding(get: { pickedTab ?? initialTab }, set: { pickedTab = $0 })
+    }
+
+    /// Today with the switch off is Now, whatever was picked before it went off.
+    private var shownTab: PanelTab {
+        settings.settings.panel.showsToday ? (pickedTab ?? initialTab) : .now
+    }
+
+    private func moduleView(_ module: PanelModule, captionColumnWidth: CGFloat,
+                            nameColumnWidth: CGFloat) -> some View {
+        PanelModuleView(module: module, engine: engine, settings: settings,
+                        layout: layout, captionColumnWidth: captionColumnWidth,
+                        nameColumnWidth: nameColumnWidth)
+            .draggable(module.rawValue) {
+                Label(module.label, systemImage: module.symbolName)
+                    .font(Design.Text.rowTitle)
+                    .padding(Design.Space.s)
+            }
+            .dropDestination(for: String.self) { items, _ in
+                guard let raw = items.first, let dragged = PanelModule(rawValue: raw),
+                      dragged != module else { return false }
+                withAnimation(Design.Motion.respectingAccessibility(Design.Motion.disclosure)) {
+                    settings.update { s in
+                        s.panel.moduleOrder = s.panel.moduleOrder(moving: dragged, before: module)
+                    }
+                }
+                return true
+            }
+    }
 
     private var modules: [PanelModule] { settings.settings.panel.visibleModules }
 
@@ -170,31 +217,94 @@ public struct PanelRootView: View {
         })
     }
 
-    /// A rule earns its place only where it delimits a block of detail.
-    ///
-    /// Drawing one between every module turned the panel into a ruled table — nine
-    /// full-width lines competing with the content they were meant to organise. Between
-    /// two collapsed summary rows there is nothing to divide: the rows already read as a
-    /// list. So a separator appears only where an expanded module begins or ends, which
-    /// is exactly where the eye needs to know a block started.
-    ///
-    /// While a disclosure runs, a rule the new layout adds stays clear until the module
-    /// it belongs to has finished unfolding, so it never cuts across a half-open detail.
-    /// Rules the new layout drops fade with the fold as before.
-    private func separatorNeeded(before index: Int) -> Bool {
-        let collapsed = layout?.collapsedModulesOverride
-            ?? settings.settings.panel.collapsedModules
-        guard let origin = layout?.disclosureOrigin else {
-            return separatorNeeded(before: index, collapsed: collapsed)
+}
+
+enum PanelTab: Hashable { case now, today }
+
+private struct PanelInitialTabKey: EnvironmentKey {
+    static let defaultValue = PanelTab.now
+}
+
+extension EnvironmentValues {
+    /// The tab the panel opens on. Now, except in renders that show Today.
+    var panelInitialTab: PanelTab {
+        get { self[PanelInitialTabKey.self] }
+        set { self[PanelInitialTabKey.self] = newValue }
+    }
+}
+
+/// The panel's modules sorted into a few cards by what they measure.
+///
+/// Nine rows in one list read as a table; four short groups read as a dashboard, and
+/// the eye finds Battery by going to the card about power. Within a card the modules
+/// keep the user's order, and the cards come in the order of their first module.
+enum PanelGroup: Hashable {
+    case compute, io, power, system
+
+    var title: String {
+        switch self {
+        case .compute: return "Compute"
+        case .io: return "Network & storage"
+        case .power: return "Power & heat"
+        case .system: return "System"
         }
-        return separatorNeeded(before: index, collapsed: collapsed)
-            && separatorNeeded(before: index, collapsed: origin)
     }
 
-    private func separatorNeeded(before index: Int, collapsed: Set<PanelModule>) -> Bool {
-        !collapsed.contains(modules[index - 1]) || !collapsed.contains(modules[index])
+    init(_ module: PanelModule) {
+        switch module {
+        case .cpu, .memory, .gpu: self = .compute
+        case .network, .disk: self = .io
+        case .battery, .thermal: self = .power
+        case .processes, .system: self = .system
+        }
     }
 
+    struct Entry: Equatable {
+        var group: PanelGroup
+        var modules: [PanelModule]
+    }
+
+    static func arrange(_ modules: [PanelModule]) -> [Entry] {
+        var entries: [Entry] = []
+        for module in modules {
+            let group = PanelGroup(module)
+            if let index = entries.firstIndex(where: { $0.group == group }) {
+                entries[index].modules.append(module)
+            } else {
+                entries.append(Entry(group: group, modules: [module]))
+            }
+        }
+        return entries
+    }
+}
+
+/// A card's heading, set in the panel's inset so it lines up with the rows below.
+struct PanelGroupLabel: View {
+    let title: String
+
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        PanelSectionLabel(title)
+            .padding(.horizontal, Design.Space.panelInset)
+            .padding(.top, Design.Space.m)
+    }
+}
+
+extension View {
+    /// A raised pane inside the panel: a faint fill, a hairline rim and a lit top
+    /// edge, which is how macOS 26 sets groups apart inside glass.
+    func panelCard() -> some View {
+        background(
+            RoundedRectangle(cornerRadius: Design.Radius.card + 2, style: .continuous)
+                .fill(Design.Palette.cardFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: Design.Radius.card + 2, style: .continuous)
+                        .strokeBorder(Design.Palette.cardRim, lineWidth: Design.Space.hairline)
+                )
+        )
+        .padding(.horizontal, Design.Space.s)
+    }
 }
 
 /// Inset rule between modules. macOS insets its separators to the content margin so

@@ -135,3 +135,40 @@ struct HistoryGapTests {
         #expect(plot([nil, c, c, c]).interiorGaps.isEmpty)
     }
 }
+
+@Suite("Today's events")
+struct PanelEventTests {
+
+    private func series(_ means: [Float], key: SeriesKey = .cpuTotal, notes: [Int: String] = [:]) -> MinuteSeries {
+        MinuteSeries(key: key, minima: means, averages: means, maxima: means,
+                     counts: means.map { $0 < 0 ? 0 : 1 }, notes: notes,
+                     end: Date(timeIntervalSince1970: 86_400))
+    }
+
+    private var cpu: PanelEvents.Rule { PanelEvents.rules[0] }
+
+    @Test("a stretch above the line becomes one event, named by its most frequent process")
+    func stretch() {
+        let s = series([0.2, 0.85, 0.97, 0.9, 0.2, 0.2, 0.2, 0.2],
+                       notes: [1: "swift-frontend", 2: "swift-frontend", 3: "Xcode"])
+        let events = PanelEvents.detect(series: s, notes: s, rule: cpu)
+        #expect(events.count == 1)
+        #expect(events.first?.level == .critical)
+        #expect(events.first?.culprit == "swift-frontend")
+        #expect(abs((events.first?.peak ?? 0) - 0.97) < 0.001)
+    }
+
+    @Test("a one-minute spike is not an event, and a short dip does not split one")
+    func spikesAndDips() {
+        let spike = series([0.2, 0.99, 0.2, 0.2, 0.2, 0.2])
+        #expect(PanelEvents.detect(series: spike, notes: spike, rule: cpu).isEmpty)
+        let dip = series([0.9, 0.9, 0.3, 0.9, 0.9, 0.2, 0.2, 0.2, 0.2])
+        #expect(PanelEvents.detect(series: dip, notes: dip, rule: cpu).count == 1)
+    }
+
+    @Test("minutes never sampled do not count as above the line")
+    func unsampled() {
+        let s = series([-1, -1, -1, -1])
+        #expect(PanelEvents.detect(series: s, notes: s, rule: cpu).isEmpty)
+    }
+}

@@ -100,6 +100,8 @@ struct AppearancePane: View {
                     }
                 }
                 .disabled(!settings.settings.panel.showsHistoryChart)
+                Toggle("Show today's events in the panel",
+                       isOn: settings.binding(\.panel.showsToday))
             } header: {
                 Text("Charts")
             } footer: {

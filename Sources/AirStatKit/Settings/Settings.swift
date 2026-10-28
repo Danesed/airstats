@@ -428,6 +428,8 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     /// read through `visibleModules`, which drops what a newer build removed and
     /// appends what it added, so a stored order never needs migrating.
     public var moduleOrder: [PanelModule]
+    /// The "Today" card: the day's CPU with its notable stretches pinned on it.
+    public var showsToday: Bool
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -441,12 +443,14 @@ public struct PanelSettings: Sendable, Codable, Equatable {
                 showsHistoryChart: Bool = true,
                 defaultHistoryRange: HistoryRange = .hour,
                 showsAlertColors: Bool = true,
-                moduleOrder: [PanelModule] = []) {
+                moduleOrder: [PanelModule] = [],
+                showsToday: Bool = true) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
         self.defaultHistoryRange = defaultHistoryRange
         self.showsAlertColors = showsAlertColors
         self.moduleOrder = moduleOrder
+        self.showsToday = showsToday
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -507,7 +511,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors, moduleOrder
+        case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors, moduleOrder, showsToday
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -520,6 +524,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         defaultHistoryRange = c.value(.defaultHistoryRange, or: .hour)
         showsAlertColors = c.value(.showsAlertColors, or: true)
         moduleOrder = c.value(.moduleOrder, or: [])
+        showsToday = c.value(.showsToday, or: true)
     }
 }
 

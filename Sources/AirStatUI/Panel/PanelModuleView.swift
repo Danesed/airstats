@@ -216,7 +216,7 @@ struct PanelModuleView: View {
                 RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
                     .stroke(Design.Palette.secondaryText.opacity(0.4), lineWidth: isFocused ? 1 : 0)
             )
-            .padding(.horizontal, Design.Space.s)
+            .padding(.horizontal, Design.Space.m)
     }
 
     @ViewBuilder
@@ -276,7 +276,8 @@ struct PanelModuleView: View {
                     .foregroundStyle(Design.Palette.secondaryText)
             }
             Text(value)
-                .font(summary.emphasis == .measurement ? Design.Text.headline : Design.Text.value)
+                .font(summary.emphasis == .state ? Design.Text.value
+                      : isExpanded ? Design.Text.openHeadline : Design.Text.headline)
                 .foregroundStyle(headlineColor)
                 .lineLimit(1)
                 .contentTransition(.numericText())

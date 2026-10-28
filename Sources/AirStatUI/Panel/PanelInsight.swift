@@ -198,13 +198,15 @@ struct PanelInsightRow: View {
                         .truncationMode(.middle)
                 }
             }
-            .padding(.horizontal, Design.Space.panelInset)
-            .padding(.vertical, Design.Space.s)
+            .padding(.horizontal, Design.Space.m)
+            .padding(.vertical, 7)
             .contentShape(Rectangle())
             .background(
-                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                    .fill(isHovering && insight.module != nil ? Design.Palette.track : .clear)
-                    .padding(.horizontal, Design.Space.s)
+                // A reading in alert takes its colour as a wash behind the line, so the
+                // panel opens on the problem; a calm one sits on the glass.
+                RoundedRectangle(cornerRadius: Design.Radius.card + 2, style: .continuous)
+                    .fill(insight.level.color.map { $0.opacity(isHovering ? 0.2 : 0.13) }
+                          ?? (isHovering && insight.module != nil ? Design.Palette.track : .clear))
             )
         }
         .buttonStyle(.plain)
