@@ -361,7 +361,7 @@ public struct MenuBarRenderModel: Equatable, Sendable {
             if let power = snapshot.power.value, let pct = power.percentage {
                 valueText = formatter.percentValue(pct)
                 unavailable = false
-                let charge = min(max(pct / 100, 0), 1)
+                var charge = min(max(pct / 100, 0), 1)
                 if power.isCharging {
                     let digits = String(Int((charge * 100).rounded()))
                     if config.style == .iconAndText {
@@ -375,6 +375,9 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                         widest += "↯"
                     }
                 }
+                // Whole percent, the resolution the digits are drawn at: the fill's
+                // track is 38 pixels at 2x, so anything finer is a redraw nobody sees.
+                charge = (charge * 100).rounded() / 100
                 let isLow = !power.isCharging && charge <= MenuBarItemRender.lowBatteryFraction
                 // Rounded off the clamped charge rather than off the raw percentage, so
                 // the digits and the fill can never disagree about how full it is.
@@ -443,7 +446,20 @@ public struct MenuBarRenderModel: Equatable, Sendable {
                       secondary: nil,
                       unavailable: unavailable, accessibility: accessibilityValue,
                       settings: settings, battery: battery,
-                      level: level.map { min(max($0, 0), 1) })
+                      level: level.map { quantizedLevel($0) })
+    }
+
+    /// Steps a level is rounded to: about one device pixel of the bar's track at 2x.
+    ///
+    /// The status item redraws only when this model changes, and every redraw is paid
+    /// once per menu bar AppKit keeps a copy in, one per display and per full-screen
+    /// Space. A CPU level wandering from 0.341 to 0.347 moves the fill by a fifth of a
+    /// pixel, which nobody can see and which still cost a full redraw. Rounded here, the
+    /// model only changes when the drawing would.
+    static let levelSteps = 32.0
+
+    static func quantizedLevel(_ value: Double) -> Double {
+        (min(max(value, 0), 1) * levelSteps).rounded() / levelSteps
     }
 
     /// What the battery indicator draws, gathered in one place so the three fields can

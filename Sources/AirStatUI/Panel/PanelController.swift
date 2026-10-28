@@ -166,6 +166,12 @@ public final class PanelController: NSObject, NSWindowDelegate {
             window.delegate = nil
             window.close()
             WindowLog.log("panel window released after \(Self.windowReleaseDelay) hidden")
+            // Closing frees the view tree, but the allocator keeps the freed pages: an
+            // opened panel peaks near 185 MB and the process then sat at 66 MB for the
+            // rest of the day. A turn of the run loop later, once the autorelease pool
+            // has let go of the last of it, the free pages go back to the system.
+            try? await Task.sleep(for: .seconds(1))
+            malloc_zone_pressure_relief(nil, 0)
         }
     }
 

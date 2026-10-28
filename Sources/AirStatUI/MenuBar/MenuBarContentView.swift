@@ -35,6 +35,10 @@ public final class MenuBarContentView: NSView {
     private var tintedSymbolCache: [TintKey: NSImage] = [:]
     /// Reused across draws so downsampling a graph allocates nothing in steady state.
     private var columnScratch: [CGFloat] = []
+    /// The finished drawing, per backing scale and resolved ink. See `draw(_:)`.
+    private var renderCache: [RenderKey: CGImage] = [:]
+    /// Renders since launch, for the tests that hold the cache to its promise.
+    private(set) var renderCount = 0
 
     /// Layout constants. Only values the design system does not already fix live here;
     /// the menu bar's own geometry and type sizes come from `Design.MenuBar`.
@@ -182,17 +186,37 @@ public final class MenuBarContentView: NSView {
     /// on the many ticks where the readout draws exactly what it drew last time.
     @discardableResult
     public func update(with model: MenuBarRenderModel) -> Bool {
+        let model = Self.drawnFields(of: model)
         guard model != self.model else { return false }
         if self.model?.usesMonospacedDigits != model.usesMonospacedDigits {
             fonts = FontSet(monospacedDigits: model.usesMonospacedDigits)
             textCache.removeAll(keepingCapacity: true)
         }
         self.model = model
+        renderCache.removeAll(keepingCapacity: true)
         let previousWidth = cachedWidth
         layOut(model)
         if cachedWidth != previousWidth { invalidateIntrinsicContentSize() }
         needsDisplay = true
         return true
+    }
+
+    /// The model with the text of styles that never draw it blanked out, so a change
+    /// nobody can see is not a change. A bar, a battery or a graph carries its number
+    /// for accessibility and nothing else, and that number moving by a percent was a
+    /// third of all redraws, each paid once per menu bar AppKit mirrors the item into.
+    /// The accessibility value travels separately, on the model the owner keeps.
+    static func drawnFields(of model: MenuBarRenderModel) -> MenuBarRenderModel {
+        var model = model
+        for index in model.items.indices
+        where !model.items[index].style.drawsValue && !model.items[index].isUnavailable {
+            model.items[index].primary.valueText = ""
+            model.items[index].primary.widestText = ""
+            model.items[index].secondary?.valueText = ""
+            model.items[index].secondary?.widestText = ""
+            model.items[index].accessibilityLabel = ""
+        }
+        return model
     }
 
     public override var intrinsicContentSize: NSSize {
@@ -410,9 +434,69 @@ public final class MenuBarContentView: NSView {
 
     // MARK: Drawing
 
+    /// What one cached rendering depends on besides the model: the pixel density and
+    /// the ink the current appearance resolves to. Those are exactly what differ
+    /// between the copies AppKit draws, one per display and per full-screen Space.
+    private struct RenderKey: Hashable {
+        let scale: CGFloat
+        let width: CGFloat
+        let height: CGFloat
+        let ink: [CGFloat]
+    }
+
+    /// Draws the cached rendering for this scale and appearance, rendering it first if
+    /// this is the first draw since the model changed.
+    ///
+    /// AppKit keeps a copy of every status item in the menu bar of each display and of
+    /// each full-screen Space, and refreshes them by redrawing this view once per copy.
+    /// Measured on a two-display Mac with two dozen full-screen Spaces, one model change
+    /// produced 48 calls to `draw`. Rendering once per distinct scale and ink, then
+    /// copying pixels, turns 46 of those into a single image blit.
     public override func draw(_ dirtyRect: NSRect) {
-        guard let model, let context = NSGraphicsContext.current?.cgContext else { return }
+        guard model != nil, let context = NSGraphicsContext.current?.cgContext else { return }
         guard !placements.isEmpty else { return }
+        // The device transform, not the CTM: a layer-backed view on a Retina display is
+        // often handed a context whose CTM is identity while its layer is 2x, and a
+        // bitmap sized off the CTM was then rendered at 1x and stretched, visibly soft
+        // on the built-in display beside a crisp external one.
+        let scale = max(abs(context.userSpaceToDeviceSpaceTransform.a), 1)
+        let ink = foregroundColor.usingColorSpace(.sRGB).map {
+            [$0.redComponent, $0.greenComponent, $0.blueComponent, $0.alphaComponent]
+        } ?? []
+        let key = RenderKey(scale: scale, width: bounds.width, height: bounds.height, ink: ink)
+        if let image = renderCache[key] ?? render(key) {
+            context.interpolationQuality = .none
+            context.draw(image, in: bounds)
+        }
+    }
+
+    private func render(_ key: RenderKey) -> CGImage? {
+        let pixelsWide = Int((key.width * key.scale).rounded(.up))
+        let pixelsHigh = Int((key.height * key.scale).rounded(.up))
+        guard pixelsWide > 0, pixelsHigh > 0,
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: pixelsWide, height: pixelsHigh,
+                                      bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        renderCount += 1
+        context.scaleBy(x: key.scale, y: key.scale)
+        // Symbols are drawn through `NSImage`, which paints into the current AppKit
+        // context, so the bitmap has to be that context for the length of the pass.
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        drawContent(in: context)
+        NSGraphicsContext.restoreGraphicsState()
+        guard let image = context.makeImage() else { return nil }
+        // Two displays in two appearances is four entries; anything past that is a
+        // display configuration that has since changed.
+        if renderCache.count >= 8 { renderCache.removeAll(keepingCapacity: true) }
+        renderCache[key] = image
+        return image
+    }
+
+    private func drawContent(in context: CGContext) {
+        guard let model else { return }
 
         // The context transform is the only reliable source of backing scale here:
         // `window?.backingScaleFactor` is nil during an offscreen render, and a

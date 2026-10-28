@@ -169,6 +169,20 @@ public final class SamplingCore: @unchecked Sendable {
     /// until the panel or the widget is open. Until then it is polled this many times
     /// more slowly: five seconds becomes thirty.
     static let powerIdleCadenceMultiplier = 6.0
+    /// True while only the menu bar is on screen and the machine is idle. See
+    /// `updateQuietLocked`.
+    private var isQuiet = false
+    /// Whole-machine CPU below which a menu-bar-only session counts as quiet, and above
+    /// which it stops. Two thresholds so a load sitting near one does not flip the
+    /// cadence on every tick. A quarter of the machine because that is ordinary desk
+    /// work on a many-core Mac: measured at 15 to 20% on twelve cores with an editor
+    /// and a browser open, so a tenth was a quiet mode that never engaged.
+    static let quietEnterBusy = 0.25
+    static let quietExitBusy = 0.40
+    /// How much more slowly a quiet session ticks. Every tick that changes the bar is
+    /// a redraw paid once per menu bar AppKit mirrors the item into, and an idle
+    /// machine's numbers are the ones least worth repainting every two seconds.
+    static let quietCadenceMultiplier = 2.0
 
     /// A single settings transaction keeps interval, source selection and network
     /// lookup changes on one queue hop. This matters while a settings control emits
@@ -239,6 +253,9 @@ public final class SamplingCore: @unchecked Sendable {
             guard newActivity != activity else { return }
             let wasSuspended = !activity.isSampling
             activity = newActivity
+            // The panel and the widget always get the full rate; quiet is re-earned
+            // from the next sample once only the menu bar is left.
+            if newActivity != .menuBar { isQuiet = false }
             rescheduleTimerLocked()
             // Coming back from suspension, sample immediately so the user never
             // sees a stale menu bar after unlocking the screen.
@@ -354,6 +371,7 @@ public final class SamplingCore: @unchecked Sendable {
         guard isRunning, activity.isSampling else { return }
 
         let interval = baseInterval * activity.cadenceMultiplier
+            * (isQuiet ? Self.quietCadenceMultiplier : 1)
         let t = DispatchSource.makeTimerSource(queue: queue)
         // Generous leeway lets the kernel coalesce our wakeups with other timers.
         // This is the difference between "Very Low" and "Low" energy impact.
@@ -425,6 +443,7 @@ public final class SamplingCore: @unchecked Sendable {
         run(diskSlot)
         run(powerSlot)
         powerEventPending = false
+        updateQuietLocked()
         run(thermalSlot)
         // Processes are by far the most expensive source; only ever sampled when
         // the panel that displays them is actually on screen, or twice in a minute
@@ -454,6 +473,23 @@ public final class SamplingCore: @unchecked Sendable {
 
         let callback = onSnapshot
         DispatchQueue.main.async { MainActor.assumeIsolated { callback(snapshot) } }
+    }
+
+    /// Enters or leaves the quiet cadence from the CPU sample just taken. Only the
+    /// menu-bar-only activity can be quiet: the panel and the widget are being looked
+    /// at, and an occluded bar is already slowed further. Without a CPU reading the
+    /// session is never quiet, since there is nothing to say it is idle.
+    private func updateQuietLocked() {
+        let quiet = Self.isQuiet(activity: activity, busy: cpuSlot.state.value?.total.busy,
+                                 wasQuiet: isQuiet)
+        guard quiet != isQuiet else { return }
+        isQuiet = quiet
+        rescheduleTimerLocked()
+    }
+
+    static func isQuiet(activity: SamplingActivity, busy: Double?, wasQuiet: Bool) -> Bool {
+        guard activity == .menuBar, let busy else { return false }
+        return busy < (wasQuiet ? quietExitBusy : quietEnterBusy)
     }
 
     /// Whether this tick should read the process list to name what is behind a

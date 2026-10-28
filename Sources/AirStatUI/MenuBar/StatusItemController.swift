@@ -248,17 +248,56 @@ public final class StatusItemController {
         // takes effect on the same pass that redraws the numbers under it.
         syncLayout()
         guard !hosted.isEmpty else { return }
-        let model = MenuBarRenderModel(snapshot: engine.snapshot,
+        let model = MenuBarRenderModel(snapshot: steadied(engine.snapshot),
                                        history: engine.history,
                                        settings: settings.settings,
                                        isStale: engine.isStale)
         for entry in hosted {
             let slice = StatusItemController.slice(model, readout: entry.readout)
+            // Read out whether or not the drawing changed: a bar's number is spoken but
+            // not drawn, so it moves on ticks that leave the pixels alone.
+            let spoken = slice.accessibilityDescription
+            if entry.item.button?.accessibilityValue() as? String != spoken {
+                entry.item.button?.setAccessibilityValue(spoken)
+            }
             guard entry.content.update(with: slice) else { continue }
             let width = entry.content.intrinsicContentSize.width
             if entry.item.length != width { entry.item.length = width }
-            entry.item.button?.setAccessibilityValue(slice.accessibilityDescription)
         }
+    }
+
+    /// The CPU temperature the menu bar last showed. See `steadied(_:)`.
+    private var shownTemperature: Double?
+    /// How far the reading has to move from the shown degree before the shown degree
+    /// changes. Half a degree is plain rounding, which flips 52/53 on every sample of a
+    /// sensor sitting at 52.5; three quarters keeps it still while staying within a
+    /// degree of the truth.
+    static let temperatureHysteresis = 0.75
+
+    /// The snapshot with the CPU temperature held on the degree last shown until the
+    /// reading has clearly left it.
+    ///
+    /// A redraw of the status item is paid once per menu bar AppKit keeps a copy in,
+    /// one per display and full-screen Space, and a temperature dithering across a
+    /// rounding boundary was half of all redraws. Only the menu bar sees the held value;
+    /// the panel reads the engine directly.
+    private func steadied(_ snapshot: SystemSnapshot) -> SystemSnapshot {
+        guard var thermal = snapshot.thermal.value, let raw = thermal.cpuCelsius else {
+            shownTemperature = nil
+            return snapshot
+        }
+        let shown = Self.steadiedTemperature(raw, shown: shownTemperature)
+        shownTemperature = shown
+        thermal.cpuCelsius = shown
+        var steadied = snapshot
+        steadied.thermal = .value(thermal)
+        return steadied
+    }
+
+    /// The degree to show for `raw`, given the degree on screen now.
+    static func steadiedTemperature(_ raw: Double, shown: Double?) -> Double {
+        if let shown, abs(raw - shown) < temperatureHysteresis { return shown }
+        return raw.rounded()
     }
 
     /// The whole-bar model narrowed to the one readout an item draws.

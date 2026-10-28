@@ -63,11 +63,14 @@ struct BarStyleRenderTests {
         let snapshot = SnapshotFixtures.nominal
         // Memory's fraction is rebuilt from byte counts in the fixture, so it is
         // compared to within a rounding, not exactly.
+        // Levels are rounded to about a pixel of the track, so they match to within
+        // half a step.
         func level(_ metric: MenuBarMetric) -> Double { render(metric, snapshot).level ?? -1 }
-        #expect(abs(level(.cpuUsage) - 0.34) < 0.001)
-        #expect(abs(level(.memoryUsage) - 0.57) < 0.001)
-        #expect(abs(level(.memoryPressure) - 0.32) < 0.001)
-        #expect(abs(level(.gpuUsage) - 0.18) < 0.001)
+        let tolerance = 0.5 / MenuBarRenderModel.levelSteps + 0.001
+        #expect(abs(level(.cpuUsage) - 0.34) < tolerance)
+        #expect(abs(level(.memoryUsage) - 0.57) < tolerance)
+        #expect(abs(level(.memoryPressure) - 0.32) < tolerance)
+        #expect(abs(level(.gpuUsage) - 0.18) < tolerance)
     }
 
     @Test("a readout with no sample has no level and is unavailable")
