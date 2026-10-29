@@ -218,7 +218,8 @@ public enum SnapshotFixtures {
             packetLoss: .value(0),
             routerIPv4: "10.0.0.1",
             dnsServers: ["1.1.1.1", "9.9.9.9"],
-            isVPNActive: false
+            isVPNActive: false,
+            routerPing: .value(PingSummary(loss: 0, averageRTT: 0.003))
         )
     }
 

@@ -352,11 +352,15 @@ enum PanelAppIcon {
 struct CopyableReadoutRow: View {
     let label: String
     let value: String
+    /// Set quieter beside the value and left out of what is copied: the router's
+    /// round trip beside its address.
+    let detail: String?
     @State private var isCopied = false
 
-    init(_ label: String, _ value: String) {
+    init(_ label: String, _ value: String, detail: String? = nil) {
         self.label = label
         self.value = value
+        self.detail = detail
     }
 
     var body: some View {
@@ -377,6 +381,12 @@ struct CopyableReadoutRow: View {
                             .font(Design.Text.caption)
                             .foregroundStyle(Color.green)
                     } else {
+                        if let detail {
+                            Text(detail)
+                                .font(Design.Text.caption.monospacedDigit())
+                                .foregroundStyle(Design.Palette.secondaryText)
+                                .lineLimit(1)
+                        }
                         Text(value)
                             .font(Design.Text.value)
                             .foregroundStyle(Design.Palette.primaryText)

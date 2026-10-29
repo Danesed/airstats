@@ -253,7 +253,8 @@ extension PanelModuleView {
                     CopyableReadoutRow("Public IP", publicIP)
                 }
                 if let router = network.routerIPv4 {
-                    CopyableReadoutRow("Router", router)
+                    CopyableReadoutRow("Router", router,
+                                       detail: network.routerPing.value?.averageRTT.map { formatter.milliseconds($0) })
                 }
                 if !network.dnsServers.isEmpty {
                     ReadoutRow("DNS", network.dnsServers.joined(separator: " · "))
@@ -279,6 +280,11 @@ extension PanelModuleView {
                         .buttonStyle(.plain)
                         .accessibilityLabel("Retest latency")
                     }
+                }
+                if let diagnosis = NetworkDiagnosis.make(router: network.routerPing,
+                                                         internetLatency: network.latency,
+                                                         internetLoss: network.packetLoss) {
+                    diagnosisRow(diagnosis, wifi: network.connectionType == .wifi)
                 }
                 if let primary = network.interfaces.first(where: { $0.name == network.primaryInterfaceName }) {
                     if let ip6 = primary.ipv6 {
@@ -336,6 +342,34 @@ extension PanelModuleView {
     /// then, so "no row" is what "not probed" looks like rather than an idle field.
     /// The loss figure rides in the same row: "42 ms · 0% loss" — two answers to
     /// one question about the same path.
+    /// Whose fault a slow connection is, said as a sentence under the numbers it is
+    /// worked out from, with a mark that says at a glance whether to read it.
+    private func diagnosisRow(_ diagnosis: NetworkDiagnosis, wifi: Bool) -> some View {
+        let link = wifi ? "Wi-Fi" : "local network"
+        let (symbol, color, text): (String, Color, String) = {
+            switch diagnosis {
+            case .healthy:
+                return ("checkmark.circle.fill", .green, "The \(link) and the internet both look healthy.")
+            case .localLink(let rtt, let loss):
+                let detail = loss >= 0.05 ? "loses \(formatter.percent(loss)) of packets"
+                                          : "takes \(rtt.map { formatter.milliseconds($0) } ?? "long") to answer"
+                return ("wifi.exclamationmark", .orange, "The \(link) is the bottleneck: the router \(detail).")
+            case .provider:
+                return ("exclamationmark.triangle.fill", .orange, "The \(link) is fine. The slowdown is past your router, at your provider.")
+            }
+        }()
+        return HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
+            Image(systemName: symbol)
+                .font(Design.Text.caption)
+                .foregroundStyle(color)
+            Text(text)
+                .font(Design.Text.caption)
+                .foregroundStyle(Design.Palette.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private func latencyValue(_ state: MetricState<TimeInterval>,
                               loss: MetricState<Double>) -> String? {
         var latency: String?

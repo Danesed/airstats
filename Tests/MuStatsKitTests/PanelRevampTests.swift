@@ -305,3 +305,44 @@ struct SleepBlockerTests {
         #expect(found.last?.reason == "")
     }
 }
+
+@Suite("Wi-Fi or provider")
+struct NetworkDiagnosisTests {
+    private func router(_ ms: Double, loss: Double = 0) -> MetricState<PingSummary> {
+        .value(PingSummary(loss: loss, averageRTT: ms / 1000))
+    }
+
+    @Test("ping's summary lines parse into loss and the mean round trip")
+    func parsePing() {
+        let out = """
+        --- 10.0.0.1 ping statistics ---
+        5 packets transmitted, 5 packets received, 0.0% packet loss
+        round-trip min/avg/max/stddev = 1.812/3.204/5.991/1.441 ms
+        """
+        let summary = PingSummary.parse(out)
+        #expect(summary?.loss == 0)
+        #expect(abs((summary?.averageRTT ?? 0) - 0.003204) < 1e-9)
+        let lost = PingSummary.parse("5 packets transmitted, 0 packets received, 100.0% packet loss")
+        #expect(lost?.loss == 1)
+        #expect(lost?.averageRTT == nil)
+    }
+
+    @Test("a slow router blames the local link")
+    func slowRouter() {
+        let verdict = NetworkDiagnosis.make(router: router(80), internetLatency: .value(0.2), internetLoss: .value(0))
+        #expect(verdict == .localLink(routerRTT: 0.08, routerLoss: 0))
+    }
+
+    @Test("a quick router and a slow internet blames the provider")
+    func provider() {
+        let verdict = NetworkDiagnosis.make(router: router(3), internetLatency: .value(0.4), internetLoss: .value(0))
+        #expect(verdict == .provider(internetRTT: 0.4, internetLoss: 0))
+    }
+
+    @Test("both quick is healthy, and a router that ignores pings says nothing")
+    func healthyAndSilent() {
+        #expect(NetworkDiagnosis.make(router: router(3), internetLatency: .value(0.03), internetLoss: .value(0)) == .healthy)
+        #expect(NetworkDiagnosis.make(router: .value(PingSummary(loss: 1, averageRTT: nil)),
+                                      internetLatency: .value(0.4), internetLoss: .value(0)) == nil)
+    }
+}

@@ -206,6 +206,13 @@ public struct MetricFormatter: Sendable {
 
     // MARK: Time
 
+    /// A round trip: "3 ms", or "0.4 ms" under one millisecond, where a router on a
+    /// cable answers.
+    public func milliseconds(_ seconds: TimeInterval) -> String {
+        let ms = seconds * 1_000
+        return fixed(ms, decimals: ms < 1 ? 1 : 0) + " ms"
+    }
+
     /// Battery time remaining and similar. "2:45" style, or "45m" when under an hour.
     public func duration(_ seconds: TimeInterval?) -> String {
         guard let seconds, seconds > 0, let total = Self.whole(seconds) else { return Self.unavailable }

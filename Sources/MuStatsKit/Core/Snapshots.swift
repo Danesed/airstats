@@ -310,6 +310,8 @@ public struct NetworkSnapshot: Sendable, Equatable {
     public var latency: MetricState<TimeInterval>
     /// Fraction of echo requests lost, 0...1, probed only while the panel is open.
     public var packetLoss: MetricState<Double>
+    /// Round trip and loss to the router, probed only while the panel is open.
+    public var routerPing: MetricState<PingSummary>
     /// The default route's address and the resolver list, from configd. The two
     /// numbers "is it the router or is it the ISP" is actually asked with.
     public var routerIPv4: String?
@@ -325,7 +327,8 @@ public struct NetworkSnapshot: Sendable, Equatable {
                 latency: MetricState<TimeInterval> = .failure(.unsupported("panel is closed")),
                 packetLoss: MetricState<Double> = .failure(.unsupported("panel is closed")),
                 routerIPv4: String? = nil, dnsServers: [String] = [],
-                isVPNActive: Bool = false) {
+                isVPNActive: Bool = false,
+                routerPing: MetricState<PingSummary> = .failure(.unsupported("panel is closed"))) {
         self.uploadBytesPerSecond = uploadBytesPerSecond
         self.downloadBytesPerSecond = downloadBytesPerSecond
         self.totalUploadBytes = totalUploadBytes
@@ -343,6 +346,7 @@ public struct NetworkSnapshot: Sendable, Equatable {
         self.routerIPv4 = routerIPv4
         self.dnsServers = dnsServers
         self.isVPNActive = isVPNActive
+        self.routerPing = routerPing
     }
 }
 

@@ -123,6 +123,9 @@ public final class NetworkCollector: MetricSource {
     /// Same gate and cadence contract as the latency probe, for the loss figure.
     private let lossProbe = PacketLossProbe()
 
+    /// The router's round trip, the first hop of the path the other two time.
+    private let routerProbe = RouterProbe()
+
     public init() {}
 
     /// Pushed in from `SamplingCore` when the setting changes, because a collector has
@@ -135,6 +138,7 @@ public final class NetworkCollector: MetricSource {
     func setLatencyProbeEnabled(_ enabled: Bool) {
         latencyProbe.setEnabled(enabled)
         lossProbe.setEnabled(enabled)
+        routerProbe.setEnabled(enabled)
     }
 
     /// Triggers an immediate probe of network latency.
@@ -311,6 +315,8 @@ public final class NetworkCollector: MetricSource {
 
         let primaryName = primaryInterfaceName()
         let router = routerAddress()
+        routerProbe.setTarget(router)
+        routerProbe.refreshIfDue()
         let dns = resolverAddresses()
         let primary = primaryName.flatMap { name in stats.first { $0.name == name } }
         sort(&stats, primaryName: primaryName)
@@ -335,7 +341,8 @@ public final class NetworkCollector: MetricSource {
             latency: latencyProbe.currentState(),
             packetLoss: lossProbe.currentState(),
             routerIPv4: router, dnsServers: dns,
-            isVPNActive: vpnActive))
+            isVPNActive: vpnActive,
+            routerPing: routerProbe.currentState()))
     }
 
     // MARK: Kernel counters
