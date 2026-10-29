@@ -441,6 +441,12 @@ extension PanelModuleView {
                          by: { ($0.energyImpact ?? 0) >= Self.significantWatts ? $0.energyImpact ?? 0 : 0 }) {
                     formatter.watts($0.energyImpact, decimals: 2)
                 }
+                if let saving = batterySaving(power) {
+                    Text(saving)
+                        .font(Design.Text.caption)
+                        .foregroundStyle(Design.Palette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if !power.accessories.isEmpty {
                     VStack(alignment: .leading, spacing: Design.Space.xs) {
                         PanelSectionLabel("Devices")
@@ -453,6 +459,21 @@ extension PanelModuleView {
                 history(available: power.hasBattery && power.percentage != nil)
             }
         }
+    }
+
+    /// On battery, what quitting the process drawing the most would buy, in time:
+    /// "Quitting Docker would add about 1 h 10 min." Nil on power, without a reading,
+    /// or when the gain is too small to be more than noise.
+    private func batterySaving(_ power: PowerSnapshot) -> String? {
+        guard let draw = BatteryForecast.draw(power),
+              let left = BatteryForecast.timeLeft(power),
+              let top = engine.processes.value?.processes
+                .filter({ ($0.energyImpact ?? 0) >= Self.significantWatts })
+                .max(by: { ($0.energyImpact ?? 0) < ($1.energyImpact ?? 0) }),
+              let gain = BatteryForecast.gain(timeLeft: left, draw: draw, processWatts: top.energyImpact ?? 0),
+              gain >= BatteryForecast.worthSaying else { return nil }
+        let name = PanelCulprit.appName(for: top)
+        return "Quitting \(name) would add about \(formatter.uptime(gain)) of battery."
     }
 
     /// The answer the battery is opened for, how long, set larger than the rows under

@@ -239,3 +239,43 @@ struct PanelMomentTests {
         #expect(abs((day.average(.cpuTotal, at: when) ?? 0) - 0.4) < 1e-6)
     }
 }
+
+@Suite("Battery life is said in minutes")
+struct BatteryForecastTests {
+    @Test("a process drawing half the pack doubles what is left")
+    func halfTheDraw() {
+        let gain = BatteryForecast.gain(timeLeft: 3_600, draw: 10, processWatts: 5) ?? 0
+        #expect(abs(gain - 3_600) < 1)
+    }
+
+    @Test("no process frees the whole draw, however much it claims")
+    func neverAllOfIt() {
+        let gain = BatteryForecast.gain(timeLeft: 3_600, draw: 10, processWatts: 40) ?? 0
+        // Three quarters freed at most: 1 h becomes 4 h.
+        #expect(abs(gain - 3 * 3_600) < 1)
+    }
+
+    @Test("on power there is no draw to forecast from")
+    func onPower() {
+        var power = PowerSnapshot()
+        power.hasBattery = true
+        power.isPluggedIn = true
+        power.batteryWatts = 12
+        #expect(BatteryForecast.draw(power) == nil)
+        power.isPluggedIn = false
+        power.batteryWatts = -12
+        #expect(BatteryForecast.draw(power) == 12)
+    }
+
+    @Test("before the system has an estimate, the charge left over the draw stands in")
+    func fallbackEstimate() {
+        var power = PowerSnapshot()
+        power.hasBattery = true
+        power.isPluggedIn = false
+        power.batteryWatts = -10
+        power.currentCapacitymAh = 5_000
+        power.voltage = 12
+        // 60 Wh at 10 W is six hours.
+        #expect(abs((BatteryForecast.timeLeft(power) ?? 0) - 6 * 3_600) < 1)
+    }
+}
