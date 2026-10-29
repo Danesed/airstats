@@ -488,3 +488,32 @@ struct StorageScanTests {
         #expect(ports.allSatisfy { $0.port < ListeningPorts.dynamicRange })
     }
 }
+
+@Suite("The calm menu bar")
+struct CalmMenuBarTests {
+    @Test("calm draws one reading, needs only its own sources, and is one item")
+    func calm() {
+        var settings = Settings()
+        settings.menuBar.isCalm = true
+        let model = MenuBarRenderModel(snapshot: SnapshotFixtures.nominal, history: MetricHistory(),
+                                       settings: settings, isStale: false)
+        #expect(model.items.isEmpty)
+        #expect(model.calm != nil)
+        #expect(model.calm?.level == .calm)
+        let sources = settings.requiredSources(panelVisible: false, desktopWidgetVisible: false)
+        #expect(sources.isSuperset(of: [.cpu, .memory, .thermal]))
+        #expect(!sources.contains(.network))
+        #expect(MenuBarItemLayout(settings: settings.menuBar) == .combined)
+    }
+
+    @Test("the load is the fullest of CPU, pressure and heat, in twentieths")
+    func load() {
+        let model = MenuBarRenderModel(snapshot: SnapshotFixtures.underLoad, history: MetricHistory(),
+                                       settings: { var s = Settings(); s.menuBar.isCalm = true; return s }(),
+                                       isStale: false)
+        let load = model.calm?.load ?? -1
+        #expect(load > 0.5)
+        #expect((load * 20).rounded() == load * 20)
+        #expect(model.calm?.level != .calm)
+    }
+}

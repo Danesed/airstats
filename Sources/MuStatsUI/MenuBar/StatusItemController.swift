@@ -19,6 +19,11 @@ enum MenuBarItemLayout: Equatable {
             self = .hidden
             return
         }
+        // Calm draws one glyph, which is one item whatever the readouts are set to.
+        if settings.isCalm {
+            self = .combined
+            return
+        }
         let enabled = settings.enabledItems.map(\.id)
         // Separate items with nothing enabled would put no item on the bar at all, and
         // with it no way back into the app short of a hot key. The combined item draws

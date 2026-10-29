@@ -120,9 +120,12 @@ public enum OffscreenRenderer {
     /// view's own display path rather than SwiftUI's renderer — this is the exact
     /// code that runs in the real menu bar.
     private static func renderMenuBar(_ request: Request, appearance: NSAppearance) -> NSImage? {
+        var settings = request.settings
+        // `MUSTATS_CALM=1` renders the calm bar: the one μ.
+        if ProcessInfo.processInfo.environment["MUSTATS_CALM"] == "1" { settings.menuBar.isCalm = true }
         var model = MenuBarRenderModel(snapshot: request.scenario.snapshot,
                                        history: request.scenario.history,
-                                       settings: request.settings,
+                                       settings: settings,
                                        isStale: false)
         // `MUSTATS_MOUSTACHE=1` renders the bar as it looks on 26 September; a fraction
         // such as 0.5 renders it partway through November.

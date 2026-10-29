@@ -157,8 +157,12 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     /// How much moustache the first readout wears, 0 for none. See `Moustache.growth`.
     public var moustache: Double = 0
 
+    /// Set in calm mode, in place of every readout.
+    public var calm: CalmReading?
+
     public var accessibilityDescription: String {
-        items.map(\.accessibilityLabel).joined(separator: ", ")
+        if let calm { return calm.accessibilityLabel }
+        return items.map(\.accessibilityLabel).joined(separator: ", ")
     }
 
     public init(snapshot: SystemSnapshot,
@@ -171,6 +175,11 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         self.usesFixedWidth = MenuBarSettings.usesFixedWidth
         self.isStale = isStale
 
+        if settings.menuBar.isCalm {
+            self.items = []
+            self.calm = CalmReading(snapshot: snapshot, history: history, formatter: formatter)
+            return
+        }
         var rendered: [MenuBarItemRender] = []
         rendered.reserveCapacity(settings.menuBar.items.count)
         for config in settings.menuBar.enabledItems {
@@ -669,5 +678,48 @@ public struct MenuBarRenderModel: Equatable, Sendable {
         case .fanSpeed: return "fan"
         case .uptime: return "clock"
         }
+    }
+}
+
+/// The calm menu bar's one reading: how loaded the Mac is overall, and whether that
+/// needs attention.
+///
+/// The fullest of three: CPU over the last few samples (one busy second should not
+/// fill the glyph), memory pressure, and the CPU temperature between a cool 40° and
+/// a hot 95°. Colour only from the same lines the panel's alert dot uses.
+public struct CalmReading: Equatable, Sendable {
+    public enum Level: Int, Sendable { case calm, warning, critical }
+
+    /// 0...1, quantised to twentieths so the glyph redraws when the fill visibly
+    /// changes and not on every sample.
+    public var load: Double
+    public var level: Level
+    public var accessibilityLabel: String
+
+    public init(load: Double, level: Level, accessibilityLabel: String = "") {
+        self.load = load
+        self.level = level
+        self.accessibilityLabel = accessibilityLabel
+    }
+
+    init(snapshot: SystemSnapshot, history: MetricHistory, formatter: MetricFormatter) {
+        let recent = history.values(.cpuTotal).suffix(5)
+        let cpu = recent.isEmpty ? (snapshot.cpu.value?.total.busy ?? 0)
+                                 : Double(recent.reduce(0, +)) / Double(recent.count)
+        let pressure = snapshot.memory.value?.pressureFraction ?? 0
+        let celsius = snapshot.thermal.value?.cpuCelsius
+        let heat = celsius.map { min(max(($0 - 40) / 55, 0), 1) } ?? 0
+        let raw = min(max(max(cpu, pressure, heat), 0), 1)
+        load = (raw * 20).rounded() / 20
+
+        if pressure >= 0.85 || (celsius ?? 0) >= 95 || cpu >= 0.97 {
+            level = .critical
+        } else if pressure >= 0.70 || (celsius ?? 0) >= 85 || cpu >= 0.90 {
+            level = .warning
+        } else {
+            level = .calm
+        }
+        let state = level == .calm ? "all normal" : (level == .warning ? "needs attention" : "under heavy load")
+        accessibilityLabel = "μStats, load \(formatter.percent(raw)), \(state)"
     }
 }

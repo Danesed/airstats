@@ -19,6 +19,14 @@ struct MenuBarPane: View {
         Form {
             Section {
                 Toggle("Show in the menu bar", isOn: settings.binding(\.menuBar.isVisible))
+                Toggle("Calm: one μ that fills with the Mac's load",
+                       isOn: settings.binding(\.menuBar.isCalm))
+                    .disabled(!isVisible)
+            } footer: {
+                if settings.settings.menuBar.isCalm {
+                    SettingsFootnote("The readouts below are kept for when calm is off. The μ turns "
+                                     + "orange or red only when something needs attention.")
+                }
             }
 
             Section {

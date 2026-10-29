@@ -61,6 +61,8 @@ public final class MenuBarContentView: NSView {
         /// Never let the item shrink to a target too small to click.
         static let minimumWidth: CGFloat = 24
         static let moustacheWidth: CGFloat = 16
+        /// The calm glyph's slot, wide enough for a μ at menu bar size.
+        static let calmWidth: CGFloat = 14
 
         /// The battery indicator, measured off the images Control Center itself draws
         /// the menu bar battery from (`battery-outline`, `battery-cap`, `battery-bolt`,
@@ -231,6 +233,11 @@ public final class MenuBarContentView: NSView {
     /// per model change. `draw` then does nothing but snap and paint.
     private func layOut(_ model: MenuBarRenderModel) {
         placements.removeAll(keepingCapacity: true)
+        if model.calm != nil {
+            // Fixed whatever the load: the glyph fills, it never grows.
+            cachedWidth = ceil(Layout.calmWidth + Layout.horizontalInset * 2)
+            return
+        }
         guard !model.items.isEmpty else { cachedWidth = 0; return }
 
         var content: CGFloat = 0
@@ -462,8 +469,8 @@ public final class MenuBarContentView: NSView {
     /// produced 48 calls to `draw`. Rendering once per distinct scale and ink, then
     /// copying pixels, turns 46 of those into a single image blit.
     public override func draw(_ dirtyRect: NSRect) {
-        guard model != nil, let context = NSGraphicsContext.current?.cgContext else { return }
-        guard !placements.isEmpty else { return }
+        guard let model, let context = NSGraphicsContext.current?.cgContext else { return }
+        guard !placements.isEmpty || model.calm != nil else { return }
         // The device transform, not the CTM: a layer-backed view on a Retina display is
         // often handed a context whose CTM is identity while its layer is 2x, and a
         // bitmap sized off the CTM was then rendered at 1x and stretched, visibly soft
@@ -518,6 +525,11 @@ public final class MenuBarContentView: NSView {
 
         context.saveGState()
         context.textMatrix = .identity
+        if let calm = model.calm {
+            drawCalm(calm, palette: palette, context: context)
+            context.restoreGState()
+            return
+        }
         if model.moustache > 0 {
             let width = (Layout.moustacheWidth * CGFloat(model.moustache)).rounded()
             let height = width / Moustache.aspect
@@ -530,6 +542,52 @@ public final class MenuBarContentView: NSView {
         for placement in placements {
             draw(placement, palette: palette, scale: scale, context: context)
         }
+        context.restoreGState()
+    }
+
+    /// The μ, outlined once from the system font at menu bar size, with the font's
+    /// x-height: the part of the glyph the load fills.
+    private static let calmGlyph: (path: CGPath, xHeight: CGFloat)? = {
+        let font = NSFont.systemFont(ofSize: 15, weight: .semibold) as CTFont
+        var character: UniChar = 0x03BC
+        var glyph: CGGlyph = 0
+        guard CTFontGetGlyphsForCharacters(font, &character, &glyph, 1),
+              let path = CTFontCreatePathForGlyph(font, glyph, nil) else { return nil }
+        return (path, CTFontGetXHeight(font))
+    }()
+
+    /// A dim μ with the load filled up from its foot in full ink: orange or red only
+    /// when the reading needs attention, so a glance at a quiet bar finds nothing.
+    private func drawCalm(_ calm: CalmReading, palette: Palette, context: CGContext) {
+        guard let (glyph, xHeight) = Self.calmGlyph else { return }
+        let box = glyph.boundingBoxOfPath
+        let origin = CGPoint(x: ((bounds.width - box.width) / 2 - box.minX).rounded(),
+                             y: (bounds.midY - box.midY).rounded())
+        var transform = CGAffineTransform(translationX: origin.x, y: origin.y)
+        guard let placed = glyph.copy(using: &transform) else { return }
+        let ink: CGColor
+        switch calm.level {
+        case .calm: ink = palette.solid
+        case .warning: ink = NSColor.systemOrange.cgColor
+        case .critical: ink = NSColor.systemRed.cgColor
+        }
+        context.addPath(placed)
+        context.setFillColor(ink.copy(alpha: (ink.alpha) * 0.32) ?? ink)
+        context.fillPath()
+        // Filled from the baseline up through the x-height, the body of the letter.
+        // The descender stays dim: lit first, it read as a stray block under the bar
+        // at the low loads a calm Mac spends most of its day at. Near full it lights too.
+        let shape = placed.boundingBoxOfPath
+        let baseline = origin.y
+        let filled = calm.load >= 0.95
+            ? shape.insetBy(dx: -1, dy: -1)
+            : CGRect(x: shape.minX - 1, y: baseline, width: shape.width + 2,
+                     height: xHeight * CGFloat(calm.load))
+        context.saveGState()
+        context.clip(to: filled)
+        context.addPath(placed)
+        context.setFillColor(ink)
+        context.fillPath()
         context.restoreGState()
     }
 

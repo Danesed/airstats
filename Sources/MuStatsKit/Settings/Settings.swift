@@ -284,6 +284,9 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// people put a battery in a second status item at all; off, the indicator is the
     /// bare shape, as the system draws it until you ask for the number.
     public var showsBatteryPercentage: Bool
+    /// One μ in place of every readout, filling with the Mac's overall load and taking
+    /// colour only when something needs attention.
+    public var isCalm: Bool
 
     /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
     /// proportional digits shimmers as it changes, which is the single most visible
@@ -304,11 +307,13 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public init(items: [MenuBarItemConfig] = MenuBarSettings.defaultItems,
                 usesCombinedItem: Bool = true,
                 isVisible: Bool = true,
-                showsBatteryPercentage: Bool = true) {
+                showsBatteryPercentage: Bool = true,
+                isCalm: Bool = false) {
         self.items = items
         self.usesCombinedItem = usesCombinedItem
         self.isVisible = isVisible
         self.showsBatteryPercentage = showsBatteryPercentage
+        self.isCalm = isCalm
     }
 
     /// CPU, memory and disk as captioned bars, the CPU temperature as a number, and
@@ -333,7 +338,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 
     private enum CodingKeys: String, CodingKey {
-        case items, usesCombinedItem, isVisible, showsBatteryPercentage
+        case items, usesCombinedItem, isVisible, showsBatteryPercentage, isCalm
     }
 
     /// Files written before the packing settings were removed still load: the keys
@@ -347,6 +352,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         usesCombinedItem = c.value(.usesCombinedItem, or: true)
         isVisible = c.value(.isVisible, or: true)
         showsBatteryPercentage = c.value(.showsBatteryPercentage, or: true)
+        isCalm = c.value(.isCalm, or: false)
     }
 }
 
@@ -1194,7 +1200,12 @@ public struct Settings: Sendable, Codable, Equatable {
     /// wants a CPU readout never pays for IOKit battery or SMC sensor polling.
     public func requiredSources(panelVisible: Bool, desktopWidgetVisible: Bool) -> Set<CollectorID> {
         var sources = Set<CollectorID>()
-        for item in menuBar.enabledItems { sources.insert(item.metric.requiredSource) }
+        if menuBar.isCalm {
+            // The one glyph is the load of these three; the hidden readouts cost nothing.
+            sources.formUnion([.cpu, .memory, .thermal])
+        } else {
+            for item in menuBar.enabledItems { sources.insert(item.metric.requiredSource) }
+        }
         if panelVisible {
             for module in panel.visibleModules { sources.insert(module.requiredSource) }
         }
