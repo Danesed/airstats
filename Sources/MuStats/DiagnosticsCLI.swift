@@ -12,6 +12,7 @@ enum DiagnosticsCLI {
     static func runIfRequested() -> Bool {
         let arguments = Array(CommandLine.arguments.dropFirst())
         guard let command = arguments.first else { return false }
+        if CommandLineTool.run(arguments) { return true }
 
         switch command {
         case "--probe":

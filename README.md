@@ -45,6 +45,25 @@ cask. Until then, build it from source.
 μStats updates itself with [Sparkle](https://sparkle-project.org) from its GitHub
 releases, and installs a new version only when you say so.
 
+## Command line
+
+The app's binary doubles as a command-line tool. Homebrew links it as `mustats`;
+from a source build, link it yourself:
+
+```sh
+ln -s /Applications/muStats.app/Contents/MacOS/muStats /usr/local/bin/mustats
+```
+
+```sh
+mustats status            # every module, one line each
+mustats cpu --json        # one module, as numbers for scripts
+mustats top -n 5 --sort energy
+mustats watch network     # refresh in place, Ctrl-C to stop
+```
+
+Rates (CPU, network, disk) are measured over one second, so each command takes
+about a second to answer. The menu bar app is never started.
+
 ## Build from source
 
 You need Xcode 26 or later: the app draws Liquid Glass, which needs the macOS 26 SDK.
