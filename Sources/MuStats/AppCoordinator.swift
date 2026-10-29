@@ -14,7 +14,6 @@ final class AppCoordinator {
     private let statusItem: StatusItemController
     private let panel: PanelController
     private let desktopWidget: DesktopWidgetController
-    private let notch: NotchController
     private let settingsWindow: SettingsWindowController
     private let thresholdMonitor: ThresholdMonitor
     private let hotKeys: GlobalHotKeyCenter
@@ -38,7 +37,6 @@ final class AppCoordinator {
         self.statusItem = StatusItemController(engine: engine, settings: store)
         self.panel = PanelController(engine: engine, settings: store, updates: updater)
         self.desktopWidget = DesktopWidgetController(engine: engine, settings: store)
-        self.notch = NotchController(engine: engine, settings: store)
         self.settingsWindow = SettingsWindowController(engine: engine, settings: store,
                                                       updater: updater, authority: authority)
         self.thresholdMonitor = ThresholdMonitor(engine: engine, settings: store, authority: authority)
@@ -92,8 +90,6 @@ final class AppCoordinator {
         updater.start()
         updateAnnouncer.start()
         desktopWidget.syncWithSettings()
-        notch.onOpenPanel = { [weak self] in self?.togglePanel() }
-        notch.start()
 
         registerSystemObservers()
         // The system follows the stored preference, and then the preference follows the
@@ -118,7 +114,6 @@ final class AppCoordinator {
         thresholdMonitor.stop()
         engine.stop()
         statusItem.remove()
-        notch.stop()
         desktopWidget.hide()
         settingsStore.flush()
     }

@@ -518,34 +518,3 @@ struct CalmMenuBarTests {
     }
 }
 
-@Suite("Notch mode")
-struct NotchModeTests {
-    @Test("the island reads what the snapshot holds, and flags what needs attention")
-    func readings() {
-        let formatter = MetricFormatter(settings: GeneralSettings())
-        let calm = NotchIslandView.readings(SnapshotFixtures.nominal, formatter)
-        #expect(calm.map(\.label).prefix(3) == ["CPU", "MEM", "TEMP"])
-        #expect(calm.allSatisfy { !$0.alert })
-        let busy = NotchIslandView.readings(SnapshotFixtures.underLoad, formatter)
-        #expect(busy.contains { $0.alert })
-    }
-
-    @MainActor
-    @Test("renders as a black island under the notch")
-    func render() throws {
-        guard let out = ProcessInfo.processInfo.environment["MUSTATS_NOTCH_RENDER"] else { return }
-        let engine = MetricsEngine(settingsStore: SettingsStore(directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("MuStatsTests-\(UUID().uuidString)")))
-        engine.loadFixture(snapshot: SnapshotFixtures.nominal, history: MetricHistory())
-        let store = SettingsStore(directory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("MuStatsTests-\(UUID().uuidString)"))
-        let view = NotchIslandView(engine: engine, settings: store, notchHeight: 38, notchWidth: 200)
-            .frame(width: 360, height: 108)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        let image = try #require(renderer.nsImage)
-        let tiff = try #require(image.tiffRepresentation)
-        let png = try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
-        try png.write(to: URL(fileURLWithPath: out))
-    }
-}

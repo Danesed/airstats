@@ -45,7 +45,6 @@
 "Appearance" = "Aspetto";
 "Asks GitHub whether a newer version exists" = "Chiede a GitHub se esiste una versione più recente";
 "At least one readout must stay visible so the menu bar item remains clickable." = "Almeno una lettura deve restare visibile, perché l’elemento nella barra dei menu resti cliccabile.";
-"BATTERY" = "BATTERIA";
 "Back online" = "Di nuovo online";
 "Bars" = "Barre";
 "Battery" = "Batteria";
@@ -65,7 +64,6 @@
 "Bottom Left" = "In basso a sinistra";
 "Bottom Right" = "In basso a destra";
 "Bytes per second (MB/s)" = "Byte al secondo (MB/s)";
-"CHARGING" = "IN CARICA";
 "CPU Frequency" = "Frequenza CPU";
 "CPU Temp" = "Temp. CPU";
 "CPU Temperature" = "Temperatura CPU";
@@ -233,7 +231,6 @@
 "Now" = "Ora";
 "Now %@, previously %@." = "Ora %1$@, prima %2$@.";
 "On Power" = "Su alimentazione";
-"On a MacBook with a notch. Useful when a crowded menu bar hides the readouts; click the open notch for the full panel." = "Sui MacBook con il notch. Utile quando una barra dei menu affollata nasconde le letture; clicca il notch aperto per il pannello completo.";
 "On battery" = "A batteria";
 "On power adapter" = "Con alimentatore";
 "On the Wallpaper" = "Sullo sfondo";
@@ -324,7 +321,6 @@
 "Show the desktop widget" = "Mostra il widget sulla scrivania";
 "Show the live chip in the panel" = "Mostra il chip in tempo reale nel pannello";
 "Show the percent sign" = "Mostra il simbolo di percentuale";
-"Show the readings when the pointer rests on the notch" = "Mostra le letture quando il puntatore è sul notch";
 "Show today's events in the panel" = "Mostra gli eventi di oggi nel pannello";
 "Simulators" = "Simulatori";
 "Size & Transparency" = "Dimensioni e trasparenza";
@@ -425,4 +421,3 @@
 "μStats, load %@, all normal" = "μStats, carico %@, tutto normale";
 "μStats, load %@, needs attention" = "μStats, carico %@, richiede attenzione";
 "μStats, load %@, under heavy load" = "μStats, carico %@, sotto forte carico";
-"↓ NET" = "↓ RETE";
