@@ -780,6 +780,7 @@ extension PanelModuleView {
                 if let display = system.displaySummary {
                     ReadoutRow("Display", display)
                 }
+                PanelSleepBlockers()
             }
         }
     }

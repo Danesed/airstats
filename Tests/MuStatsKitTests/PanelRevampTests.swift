@@ -279,3 +279,29 @@ struct BatteryForecastTests {
         #expect(abs((BatteryForecast.timeLeft(power) ?? 0) - 6 * 3_600) < 1)
     }
 }
+
+@Suite("What keeps the Mac awake reads like a person would say it")
+struct SleepBlockerTests {
+    private func assertion(_ type: String, _ name: String, process: String, level: Int = 255) -> [String: Any] {
+        ["AssertType": type, "AssertName": name, "Process Name": process, "AssertLevel": level]
+    }
+
+    @Test("one row per process, the strongest hold, the display-on hold left out")
+    func parsing() {
+        let found = SleepBlockers.blockers(from: [
+            (pid: 360, assertions: [assertion("PreventUserIdleSystemSleep", "Powerd - Prevent sleep while display is on", process: "powerd")]),
+            (pid: 92148, assertions: [
+                assertion("PreventUserIdleDisplaySleep", "Amphetamine (Single-Use - Display)", process: "Amphetamine"),
+                assertion("PreventUserIdleSystemSleep", "Amphetamine (Single-Use - System)", process: "Amphetamine"),
+            ]),
+            (pid: 839, assertions: [assertion("PreventUserIdleSystemSleep", "BTLEAdvertisement.5832B539-ACA8-4040-86A6-2E1BF7476E87", process: "useractivityd")]),
+            (pid: 12, assertions: [assertion("UserIsActive", "tickle", process: "WindowServer")]),
+            (pid: 13, assertions: [assertion("PreventUserIdleSystemSleep", "released", process: "Zoom", level: 0)]),
+        ])
+        #expect(found.map(\.processName) == ["Amphetamine", "useractivityd"])
+        #expect(found.first?.hold == .system)
+        #expect(found.first?.reason == "Amphetamine (Single-Use - System)")
+        // An identifier says nothing to a person, so it is dropped.
+        #expect(found.last?.reason == "")
+    }
+}
