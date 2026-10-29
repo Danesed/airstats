@@ -29,8 +29,8 @@ struct AboutPane: View {
 
     private var moustache: some View {
         MoustacheShape()
-            .frame(width: 34, height: 34 / Moustache.aspect)
-            .offset(y: 4)
+            .frame(width: 24, height: 24 / Moustache.aspect)
+            .offset(y: 8)
             .scaleEffect(wearsMoustache ? 1 : 0.2, anchor: .center)
             .opacity(wearsMoustache ? 1 : 0)
             .animation(.spring(response: 0.35, dampingFraction: 0.5), value: wearsMoustache)
@@ -42,7 +42,7 @@ struct AboutPane: View {
             Section {
                 HStack(spacing: Design.Space.xl) {
                     LogoMark(size: 52)
-                        .overlay(alignment: .bottom) { moustache }
+                        .overlay { moustache }
                         .foregroundStyle(Design.Palette.primaryText)
                         .contentShape(Rectangle())
                         .onTapGesture { logoTaps += 1 }
