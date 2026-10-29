@@ -144,7 +144,7 @@ struct NotificationsPane: View {
         // other row in this window does.
         Toggle(isOn: enabledBinding(rule)) {
             HStack(spacing: Design.Space.m) {
-                Text(rule.metric.label)
+                Text(localizing: rule.metric.label)
                 // The threshold rides at the trailing edge beside the switch that
                 // governs it. Left where it was — pressed up against the label — the
                 // number and its switch sat half a window apart, and the row read as
@@ -189,7 +189,7 @@ struct NotificationsPane: View {
         if rule.metric == .thermalPressure {
             Picker("", selection: thresholdBinding(rule)) {
                 ForEach(ThermalPressure.allLevels, id: \.self) { level in
-                    Text(level.label).tag(Double(level.rawValue))
+                    Text(localizing: level.label).tag(Double(level.rawValue))
                 }
             }
             .labelsHidden()

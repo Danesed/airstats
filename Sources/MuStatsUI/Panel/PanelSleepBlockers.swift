@@ -37,7 +37,8 @@ struct PanelSleepBlockers: View {
     private func row(_ blocker: SleepBlocker) -> some View {
         let app = NSRunningApplication(processIdentifier: blocker.pid)
         let name = app?.localizedName ?? blocker.processName
-        let what = blocker.hold == .display ? "Keeps the display on" : "Keeps the Mac awake"
+        let what = blocker.hold == .display ? String(localized: "Keeps the display on")
+                                            : String(localized: "Keeps the Mac awake")
         return HStack(spacing: Design.Space.s) {
             if let icon = app?.icon {
                 Image(nsImage: icon)

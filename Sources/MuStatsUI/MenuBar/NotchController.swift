@@ -217,7 +217,7 @@ struct NotchIslandView: View {
             HStack(spacing: 18) {
                 ForEach(readings, id: \.label) { reading in
                     VStack(spacing: 1) {
-                        Text(reading.label)
+                        Text(localizing: reading.label)
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(.white.opacity(0.55))
                         UnitText.text(reading.value, size: 14, weight: .semibold)

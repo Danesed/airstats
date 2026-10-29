@@ -369,7 +369,7 @@ struct SettingsFootnote: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
-        Text(text)
+        Text(localizing: text)
             .font(.callout)
             .foregroundStyle(Design.Palette.secondaryText)
             .fixedSize(horizontal: false, vertical: true)
@@ -392,7 +392,7 @@ struct SettingsCaution: View {
         HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(Color(nsColor: .systemOrange))
-            Text(text)
+            Text(localizing: text)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .font(.callout)
@@ -462,7 +462,7 @@ struct ModuleLabel: View {
             Image(systemName: module.symbolName)
                 .frame(width: 18, alignment: .center)
                 .foregroundStyle(Design.Palette.metric(module.requiredSource))
-            Text(module.label)
+            Text(localizing: module.label)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(module.label)

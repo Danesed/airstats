@@ -216,7 +216,7 @@ struct SettingsRootView: View {
                                 // it and dragging its title along.
                                 .font(.system(size: 13))
                                 .frame(width: 22, alignment: .center)
-                            Text(item.label)
+                            Text(localizing: item.label)
                         }
                             // The source-list selection pair, not the accent colour:
                             // these two track each other through graphite, increased

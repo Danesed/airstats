@@ -349,7 +349,7 @@ private struct DesktopWidgetModuleView: View {
             return "\(formatter.duration(full)) to full"
         }
         guard let empty = power.timeToEmpty else {
-            return power.isPluggedIn ? "Plugged in" : "On battery"
+            return power.isPluggedIn ? String(localized: "Plugged in") : String(localized: "On battery")
         }
         return "\(formatter.duration(empty)) left"
     }
@@ -413,14 +413,14 @@ private struct DesktopWidgetHeaderRow: View {
                 // with itself about which of the two the colour meant.
                 .foregroundStyle(Design.Palette.secondaryText)
                 .frame(width: DesktopWidgetModuleView.iconColumn)
-            SwiftUI.Text(readout.title)
+            SwiftUI.Text(localizing: readout.title)
                 .font(Design.Text.sectionHeader)
                 .foregroundStyle(Design.Palette.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: Design.Space.m)
             LineStrut(font: Design.Text.desktopWidgetValue)
             if let failure {
-                SwiftUI.Text(failure.shortLabel)
+                SwiftUI.Text(localizing: failure.shortLabel)
                     .font(Design.Text.caption)
                     .foregroundStyle(Design.Palette.tertiaryText)
                     .lineLimit(1)
@@ -470,7 +470,7 @@ private struct DesktopWidgetDetailRow: View {
 
     var body: some View {
         HStack(spacing: Design.Space.rowGap) {
-            SwiftUI.Text(detail.label)
+            SwiftUI.Text(localizing: detail.label)
                 .font(Design.Text.caption)
                 .foregroundStyle(Design.Palette.tertiaryText)
                 .lineLimit(1)

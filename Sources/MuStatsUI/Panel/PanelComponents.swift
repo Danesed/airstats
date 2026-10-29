@@ -147,7 +147,7 @@ struct PanelSegmentLegend: View {
     private func entry(_ segment: CompositionSegment) -> some View {
         HStack(spacing: Design.Space.xs) {
             CompositionSwatch(segment: segment, side: Design.Space.s)
-            Text(segment.shortLabel)
+            Text(localizing: segment.shortLabel)
                 .font(Design.Text.caption)
                 .foregroundStyle(Design.Palette.secondaryText)
             Spacer(minLength: Design.Space.xs)
@@ -181,7 +181,7 @@ struct PanelBarRow: View {
 
     var body: some View {
         HStack(spacing: Design.Space.m) {
-            Text(label)
+            Text(localizing: label)
                 .font(Design.Text.label)
                 .foregroundStyle(Design.Palette.secondaryText)
                 .lineLimit(1)
@@ -244,7 +244,7 @@ struct PanelDetailGrid: View {
 
     private func tile(_ entry: PanelDetailEntry) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(entry.label)
+            Text(localizing: entry.label)
                 .font(Design.Text.micro.weight(.medium))
                 .foregroundStyle(Design.Palette.tertiaryText)
                 .textCase(.uppercase)
@@ -366,7 +366,7 @@ struct CopyableReadoutRow: View {
     var body: some View {
         Button(action: copyToClipboard) {
             HStack(spacing: Design.Space.rowGap) {
-                Text(label)
+                Text(localizing: label)
                     .font(Design.Text.label)
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
@@ -483,7 +483,7 @@ struct PanelSectionLabel: View {
     init(_ title: String) { self.title = title }
 
     var body: some View {
-        Text(title)
+        Text(localizing: title)
             .font(Design.Text.caption.weight(.medium))
             .foregroundStyle(Design.Palette.tertiaryText)
             .textCase(.uppercase)

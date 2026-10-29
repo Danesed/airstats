@@ -407,7 +407,7 @@ struct PanelHeaderView: View {
             if tabs.count > 1 {
                 Picker("View", selection: $tab) {
                     ForEach(tabs, id: \.self) { tab in
-                        Text(tab.title).tag(tab)
+                        Text(localizing: tab.title).tag(tab)
                     }
                 }
                 .pickerStyle(.segmented)

@@ -24,10 +24,10 @@ struct PanelLiveChip: View {
         let memory = engine.memory.value
         VStack(alignment: .leading, spacing: Design.Space.s) {
             HStack(alignment: .firstTextBaseline) {
-                PanelSectionLabel(engine.system.value?.chipName ?? "This Mac's chip")
+                PanelSectionLabel(engine.system.value?.chipName ?? String(localized: "This Mac's chip"))
                 Spacer()
                 if let cpu {
-                    Text("CPU \(formatter.percent(cpu.total.busy))")
+                    Text(verbatim: "CPU \(formatter.percent(cpu.total.busy))")
                         .font(Design.Text.caption.monospacedDigit())
                         .foregroundStyle(Design.Palette.secondaryText)
                 }
@@ -150,7 +150,7 @@ struct PanelLiveChip: View {
 
     private func blockTitle(_ title: String, _ value: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text(title.uppercased())
+            Text(String(localized: String.LocalizationValue(title)).uppercased())
                 .font(.system(size: 9, weight: .semibold))
                 .kerning(0.4)
                 .foregroundStyle(Self.teal.opacity(0.8))

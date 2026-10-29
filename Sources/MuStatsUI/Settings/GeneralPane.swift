@@ -42,17 +42,17 @@ struct GeneralPane: View {
             Section {
                 Picker("Temperature", selection: settings.binding(\.general.temperatureUnit)) {
                     ForEach(TemperatureUnit.allCases, id: \.self) { unit in
-                        Text(unit.label).tag(unit)
+                        Text(localizing: unit.label).tag(unit)
                     }
                 }
                 Picker("Network rate", selection: settings.binding(\.general.networkRateUnit)) {
                     ForEach(NetworkRateUnit.allCases, id: \.self) { unit in
-                        Text(unit.label).tag(unit)
+                        Text(localizing: unit.label).tag(unit)
                     }
                 }
                 Picker("Storage sizes", selection: settings.binding(\.general.byteUnitStyle)) {
                     ForEach(ByteUnitStyle.allCases, id: \.self) { style in
-                        Text(style.label).tag(style)
+                        Text(localizing: style.label).tag(style)
                     }
                 }
                 Toggle("Show the percent sign", isOn: settings.binding(\.general.showsPercentSign))

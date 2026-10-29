@@ -127,8 +127,8 @@ public final class NotificationAuthority {
     /// Quit and Ignore for a process that ran away; Quit alone for one that is only
     /// heavy. The titles are the system's to lay out; these are the words on them.
     private static var categories: Set<UNNotificationCategory> {
-        let quit = UNNotificationAction(identifier: quitAction, title: "Quit", options: [.destructive])
-        let ignore = UNNotificationAction(identifier: ignoreAction, title: "Ignore", options: [])
+        let quit = UNNotificationAction(identifier: quitAction, title: String(localized: "Quit"), options: [.destructive])
+        let ignore = UNNotificationAction(identifier: ignoreAction, title: String(localized: "Ignore"), options: [])
         return [
             UNNotificationCategory(identifier: "runaway", actions: [quit, ignore], intentIdentifiers: []),
             UNNotificationCategory(identifier: "quittable", actions: [quit], intentIdentifiers: []),

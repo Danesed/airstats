@@ -394,7 +394,7 @@ enum HistoryAxis {
     /// points is what fits, and thirds of the shipped spans are all whole seconds.
     static func labels(span: TimeInterval, end: Date) -> [String] {
         marks.map { mark in
-            if mark >= 1 { return "now" }
+            if mark >= 1 { return String(localized: "now") }
             if span > 86_400 {
                 return day(end.addingTimeInterval(-span * (1 - mark)))
             }
@@ -422,7 +422,7 @@ enum HistoryAxis {
     /// "-5m", "-3:20", "-40s": how long before now a point on the axis is.
     static func relative(_ offset: TimeInterval) -> String {
         let seconds = Int((-offset).rounded())
-        guard seconds > 0 else { return "now" }
+        guard seconds > 0 else { return String(localized: "now") }
         if seconds < 60 { return "-\(seconds)s" }
         let minutes = seconds / 60
         let rest = seconds % 60

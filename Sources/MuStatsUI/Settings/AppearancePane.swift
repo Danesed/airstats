@@ -19,7 +19,7 @@ struct AppearancePane: View {
                 Picker("Theme", selection: settings.binding(\.general.appearance,
                                                             onChange: applyAppearance)) {
                     ForEach(AppearanceMode.allCases, id: \.self) { mode in
-                        Text(mode.label).tag(mode)
+                        Text(localizing: mode.label).tag(mode)
                     }
                 }
 
@@ -84,7 +84,7 @@ struct AppearancePane: View {
             Section {
                 Picker("Chart style", selection: settings.binding(\.charts.style)) {
                     ForEach(ChartStyle.allCases, id: \.self) { style in
-                        Text(style.label).tag(style)
+                        Text(localizing: style.label).tag(style)
                     }
                 }
                 Picker("Keep history for", selection: settings.binding(\.charts.historyDuration)) {
@@ -143,7 +143,7 @@ struct AppearancePane: View {
             Image(systemName: id.symbolName)
                 .frame(width: 18, alignment: .center)
                 .foregroundStyle(Design.Palette.metric(id))
-            Text(id.label)
+            Text(localizing: id.label)
                 .lineLimit(1)
             Spacer(minLength: Design.Space.s)
             SwatchButton(current: Design.Palette.metric(id),

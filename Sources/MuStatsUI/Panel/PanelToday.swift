@@ -30,9 +30,9 @@ struct PanelEvent: Equatable, Identifiable {
 
     func title(using formatter: MetricFormatter) -> String {
         switch kind {
-        case .cpu: return "CPU at \(formatter.percent(peak))"
-        case .memory: return "Memory pressure \(formatter.percent(peak))"
-        case .heat: return "Running hot, \(formatter.temperature(peak))"
+        case .cpu: return String(localized: "CPU at \(formatter.percent(peak))")
+        case .memory: return String(localized: "Memory pressure \(formatter.percent(peak))")
+        case .heat: return String(localized: "Running hot, \(formatter.temperature(peak))")
         }
     }
 }
@@ -146,7 +146,8 @@ struct PanelTodayCard: View {
             HStack(alignment: .firstTextBaseline) {
                 PanelSectionLabel("CPU, last 24 hours")
                 Spacer()
-                Text(events.isEmpty ? "Nothing notable" : events.count == 1 ? "1 event" : "\(events.count) events")
+                Text(events.isEmpty ? String(localized: "Nothing notable")
+                     : String(localized: "\(events.count) events"))
                     .font(Design.Text.caption)
                     .foregroundStyle(Design.Palette.tertiaryText)
             }
@@ -305,7 +306,7 @@ struct PanelMoment: Equatable {
             let pressure = value(.memoryPressure).flatMap { $0 >= 0.5 ? $0 : nil }
             rows.append(Row(label: "Memory",
                             value: formatter.percent(memory)
-                                + (pressure.map { " · pressure \(formatter.percent($0))" } ?? ""),
+                                + (pressure.map { String(localized: " · pressure \(formatter.percent($0))") } ?? ""),
                             culprit: day.note(.memory, at: date)?.name))
         }
         if let gpu = value(.gpuUtilization) {
@@ -323,7 +324,7 @@ struct PanelMoment: Equatable {
         if watts != nil || charge != nil {
             let plugged = (value(.batteryPlugged) ?? 0) >= 0.5
             let parts = [watts.map { formatter.watts($0) },
-                         charge.map { formatter.percent($0) + (plugged ? " charging" : "") }]
+                         charge.map { formatter.percent($0) + (plugged ? String(localized: " charging") : "") }]
             rows.append(Row(label: "Power", value: parts.compactMap { $0 }.joined(separator: " · ")))
         }
         self.rows = rows
@@ -350,7 +351,7 @@ struct PanelMomentCard: View {
             }
             ForEach(moment.rows, id: \.label) { row in
                 HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
-                    Text(row.label)
+                    Text(localizing: row.label)
                         .font(Design.Text.caption)
                         .foregroundStyle(Design.Palette.secondaryText)
                     Spacer(minLength: Design.Space.s)

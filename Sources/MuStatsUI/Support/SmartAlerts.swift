@@ -79,8 +79,8 @@ struct RunawayWatch {
         let minutes = Int(now.timeIntervalSince(streak.since) / 60)
         let app = busy.first { $0.pid == pid }.map(PanelCulprit.appName(for:)) ?? streak.name
         return SmartAlert(identifier: "smart.runaway.\(streak.name)",
-                          title: "\(app) is keeping a core busy",
-                          body: "It has used a full core for \(minutes) minutes while you were away.",
+                          title: String(localized: "\(app) is keeping a core busy"),
+                          body: String(localized: "It has used a full core for \(minutes) minutes while you were away."),
                           category: .runaway, pid: pid, processName: streak.name)
     }
 }
@@ -103,11 +103,11 @@ struct UnusualWatch {
     }
 
     static let metrics: [Metric] = [
-        Metric(key: .cpuTotal, title: "CPU is unusually busy", floor: 0.35, margin: 0.25,
+        Metric(key: .cpuTotal, title: String(localized: "CPU is unusually busy"), floor: 0.35, margin: 0.25,
                format: { v, f in f.percent(v) }, note: .cpu),
-        Metric(key: .cpuTemperature, title: "Running hotter than usual", floor: 75, margin: 12,
+        Metric(key: .cpuTemperature, title: String(localized: "Running hotter than usual"), floor: 75, margin: 12,
                format: { v, f in f.temperature(v) }, note: .cpu),
-        Metric(key: .memoryPressure, title: "Memory pressure is unusually high", floor: 0.5, margin: 0.2,
+        Metric(key: .memoryPressure, title: String(localized: "Memory pressure is unusually high"), floor: 0.5, margin: 0.2,
                format: { v, f in f.percent(v) }, note: .memory),
     ]
 
@@ -137,11 +137,11 @@ struct UnusualWatch {
             else { continue }
             lastAlert[metric.key] = now
             let hour = calendar.component(.hour, from: now)
-            var body = "\(metric.format(current, formatter)) for the last \(Self.window) minutes. "
-                + "Around \(String(format: "%02d", hour)):00 this Mac usually sits near \(metric.format(usual.median, formatter))."
+            let clock = String(format: "%02d:00", hour)
+            var body = String(localized: "\(metric.format(current, formatter)) for the last \(Self.window) minutes. Around \(clock) this Mac usually sits near \(metric.format(usual.median, formatter)).")
             if let kind = metric.note,
                let name = (0..<Self.window).lazy.compactMap({ day.note(kind, at: now.addingTimeInterval(-60 * Double($0)))?.name }).first {
-                body += " Top: \(name)."
+                body += " " + String(localized: "Top: \(name).")
             }
             alerts.append(SmartAlert(identifier: "smart.unusual.\(metric.key.rawValue)",
                                      title: metric.title, body: body, category: .plain))
@@ -233,14 +233,14 @@ struct UnplugWatch {
         guard watts >= Self.heavyWatts else { return outcome }
 
         let app = PanelCulprit.appName(for: top)
-        var body = "It keeps drawing power on battery."
+        var body = String(localized: "It keeps drawing power on battery.")
         if let draw = BatteryForecast.draw(power), let left = BatteryForecast.timeLeft(power),
            let gain = BatteryForecast.gain(timeLeft: left, draw: draw, processWatts: watts),
            gain >= BatteryForecast.worthSaying {
-            body = "Quitting it would add about \(formatter.uptime(gain)) of battery."
+            body = String(localized: "Quitting it would add about \(formatter.uptime(gain)) of battery.")
         }
         outcome.alert = SmartAlert(identifier: "smart.unplug",
-                                   title: "\(app) is using \(formatter.watts(watts)) on battery",
+                                   title: String(localized: "\(app) is using \(formatter.watts(watts)) on battery"),
                                    body: body, category: .quittable, pid: top.pid, processName: top.name)
         return outcome
     }

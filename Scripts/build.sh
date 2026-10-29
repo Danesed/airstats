@@ -33,6 +33,11 @@ vtool -set-build-version macos "$MIN_OS" "$SDK_VERSION" -replace \
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
+# Translations: each language's strings table goes where Bundle.main looks for it.
+for lproj in Resources/*.lproj; do
+  [ -d "$lproj" ] && ditto "$lproj" "$APP/Contents/Resources/$(basename "$lproj")"
+done
+
 # An Icon Composer file is the Liquid Glass icon. actool compiles it into the asset
 # catalog macOS 26 draws the glass from, plus a flattened AppIcon.icns that macOS 14
 # and 15 use instead, and naming it in CFBundleIconName is what makes the system pick

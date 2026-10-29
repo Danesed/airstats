@@ -255,7 +255,7 @@ public struct ReadoutRow: View {
 
     public var body: some View {
         HStack(spacing: Design.Space.rowGap) {
-            SwiftUI.Text(label)
+            SwiftUI.Text(localizing: label)
                 .font(Design.Text.label)
                 .foregroundStyle(Design.Palette.secondaryText)
                 .lineLimit(1)
@@ -592,5 +592,14 @@ extension NSAppearance {
     /// relying on a single static colour that only works in one of them.
     var isDark: Bool {
         bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    }
+}
+
+extension Text {
+    /// A word of the app's own that arrives as a `String`, a module's name or a
+    /// component's label, looked up in the strings table the way a literal is.
+    /// A string with no entry, a reading or a name, shows as it is.
+    init(localizing key: String) {
+        self.init(LocalizedStringKey(key))
     }
 }

@@ -136,7 +136,7 @@ struct PanelModuleView: View {
                     .overlay(alignment: .topTrailing) { alertDot }
                 // The name is what the row is, the number is what it says: the name
                 // steps back in weight and colour so the eye lands on the number.
-                Text(module.label)
+                Text(localizing: module.label)
                     .font(Design.Text.rowTitle)
                     .foregroundStyle(Design.Palette.secondaryText)
                     .lineLimit(1)
@@ -323,17 +323,17 @@ extension PanelSummary {
             // The percentage alone cannot say whether work is queueing: 34% with a
             // load of 12 is a very different machine from 34% with a load of 1.
             return PanelSummary(value: formatter.percent(cpu.total.busy),
-                                caption: "load " + formatter.fixed(cpu.loadAverage.one, decimals: 1))
+                                caption: String(localized: "load \(formatter.fixed(cpu.loadAverage.one, decimals: 1))"))
         case .memory:
             guard let memory = engine.memory.value else { return warmup(for: engine.memory) }
             let ramValue = Self.usedOfTotal(Double(memory.usedBytes), Double(memory.totalBytes),
                                             formatter: formatter)
             return PanelSummary(value: ramValue,
-                                caption: "pressure " + formatter.percent(memory.pressureFraction))
+                                caption: String(localized: "pressure \(formatter.percent(memory.pressureFraction))"))
         case .gpu:
             guard let gpu = engine.gpu.value else { return warmup(for: engine.gpu) }
             guard let device = gpu.primary else { return PanelSummary() }
-            let utilCaption = device.utilization.map { "util " + formatter.percent($0) }
+            let utilCaption = device.utilization.map { String(localized: "util \(formatter.percent($0))") }
             if let used = device.vramUsedBytes {
                 let vramValue = device.vramTotalBytes.flatMap { $0 > 0 ? $0 : nil }
                     .map { Self.usedOfTotal(Double(used), Double($0), formatter: formatter) }
@@ -364,7 +364,7 @@ extension PanelSummary {
             let freeFraction = root.totalBytes > 0
                 ? Double(root.availableBytes) / Double(root.totalBytes) : 0
             return PanelSummary(value: formatter.storage(root.availableBytes),
-                                caption: formatter.percent(freeFraction) + " free")
+                                caption: String(localized: "\(formatter.percent(freeFraction)) free"))
         case .battery:
             guard let power = engine.power.value else { return warmup(for: engine.power) }
             guard power.hasBattery, let percentage = power.percentage else {
@@ -388,9 +388,11 @@ extension PanelSummary {
                 guard let fastest = thermal.fans.max(by: { $0.currentRPM < $1.currentRPM }) else { return nil }
                 if let max = fastest.maxRPM, max > 0 {
                     let pct = Int((100 * fastest.currentRPM / max).rounded())
-                    return "fan \(pct)%"
+                    let share = "\(pct)%"
+                    return String(localized: "fan \(share)")
                 }
-                return "fan \(Int(fastest.currentRPM.rounded()))"
+                let rpm = "\(Int(fastest.currentRPM.rounded()))"
+                return String(localized: "fan \(rpm)")
             }()
             guard let celsius = thermal.cpuCelsius else {
                 return PanelSummary(value: thermal.pressure.label, caption: fan,
@@ -400,10 +402,10 @@ extension PanelSummary {
         case .processes:
             guard let processes = engine.processes.value else { return warmup(for: engine.processes) }
             return PanelSummary(value: formatter.count(processes.totalProcessCount),
-                                caption: "running")
+                                caption: String(localized: "running"))
         case .system:
             guard let system = engine.system.value else { return warmup(for: engine.system) }
-            return PanelSummary(value: formatter.uptime(system.uptime), caption: "uptime")
+            return PanelSummary(value: formatter.uptime(system.uptime), caption: String(localized: "uptime"))
         }
     }
 

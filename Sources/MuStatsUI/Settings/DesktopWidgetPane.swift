@@ -71,7 +71,7 @@ struct DesktopWidgetPane: View {
             Section {
                 Picker("Position", selection: settings.binding(\.desktopWidget.corner)) {
                     ForEach(DesktopWidgetCorner.allCases, id: \.self) { corner in
-                        Text(corner.label).tag(corner)
+                        Text(localizing: corner.label).tag(corner)
                     }
                 }
                 if desktopWidget.corner == .free {
@@ -93,7 +93,7 @@ struct DesktopWidgetPane: View {
             Section {
                 Picker("Layer", selection: settings.binding(\.desktopWidget.depth)) {
                     ForEach(DesktopWidgetDepth.allCases, id: \.self) { depth in
-                        Text(depth.label).tag(depth)
+                        Text(localizing: depth.label).tag(depth)
                     }
                 }
                 Toggle("Click through the desktop widget", isOn: settings.binding(\.desktopWidget.isClickThrough))
@@ -143,7 +143,7 @@ struct DesktopWidgetPane: View {
                     .accessibilityLabel(module.label)
                 }
                 .draggable(module.rawValue) {
-                    Text(module.label).padding(Design.Space.xs)
+                    Text(localizing: module.label).padding(Design.Space.xs)
                 }
                 .dropDestination(for: String.self) { payload, _ in
                     dropTarget = nil

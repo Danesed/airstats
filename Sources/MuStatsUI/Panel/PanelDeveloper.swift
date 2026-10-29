@@ -75,7 +75,7 @@ struct PanelListeningPorts: View {
 
     private func portRow(_ port: ListeningPort) -> some View {
         let app = NSRunningApplication(processIdentifier: port.pid)
-        let owner = container(publishing: port.port).map { "\($0.name) (Docker)" }
+        let owner = container(publishing: port.port).map { String(localized: "\($0.name) (Docker)") }
             ?? app?.localizedName ?? port.processName
         return HStack(spacing: Design.Space.s) {
             Text(verbatim: "\(port.port)")
@@ -181,7 +181,7 @@ struct PanelStorageInsights: View {
                 row(label: "Docker images, volumes and cache", bytes: docker.total, change: nil, folder: nil)
             }
             if measuring {
-                Text(folders.isEmpty ? "Measuring folders…" : "Measuring again…")
+                Text(folders.isEmpty ? String(localized: "Measuring folders…") : String(localized: "Measuring again…"))
                     .font(Design.Text.caption)
                     .foregroundStyle(Design.Palette.tertiaryText)
             }
@@ -212,13 +212,18 @@ struct PanelStorageInsights: View {
                 Int64((now - $0) * Double(root.totalBytes))
             }
         }
-        func say(_ bytes: Int64, _ when: String) -> String? {
+        func say(_ bytes: Int64, weekAgo: Bool) -> String? {
             guard abs(bytes) >= 500_000_000 else { return nil }
             let amount = formatter.storage(UInt64(abs(bytes)))
-            return bytes > 0 ? "\(amount) more used than \(when)" : "\(amount) freed since \(when)"
+            switch (bytes > 0, weekAgo) {
+            case (true, false): return String(localized: "\(amount) more used than yesterday")
+            case (true, true): return String(localized: "\(amount) more used than a week ago")
+            case (false, false): return String(localized: "\(amount) freed since yesterday")
+            case (false, true): return String(localized: "\(amount) freed in the last week")
+            }
         }
-        let parts = [delta(86_400).flatMap { say($0, "yesterday") },
-                     delta(7 * 86_400).flatMap { say($0, "a week ago") }].compactMap { $0 }
+        let parts = [delta(86_400).flatMap { say($0, weekAgo: false) },
+                     delta(7 * 86_400).flatMap { say($0, weekAgo: true) }].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
@@ -259,7 +264,8 @@ struct PanelStorageInsights: View {
                     .foregroundStyle(Design.Palette.primaryText)
                     .lineLimit(1)
                 if let change, abs(change.bytes) >= Int64(StorageScan.worthListing) {
-                    Text("\(change.bytes > 0 ? "+" : "−")\(formatter.storage(UInt64(abs(change.bytes)))) since \(Self.day(change.since))")
+                    let amount = (change.bytes > 0 ? "+" : "−") + formatter.storage(UInt64(abs(change.bytes)))
+                    Text(String(localized: "\(amount) since \(Self.day(change.since))"))
                         .font(Design.Text.caption)
                         .foregroundStyle(change.bytes >= 5_000_000_000 ? Color.orange : Design.Palette.secondaryText)
                 }
@@ -294,7 +300,8 @@ struct PanelStorageInsights: View {
         if cleaning == folder.id {
             ProgressView().controlSize(.small)
         } else {
-            Button(confirming == folder.id ? "Delete \(formatter.storage(bytes))?" : "Clean") {
+            Button(confirming == folder.id ? String(localized: "Delete \(formatter.storage(bytes))?")
+                                           : String(localized: "Clean")) {
                 if confirming == folder.id {
                     confirming = nil
                     clean(folder)
@@ -309,7 +316,8 @@ struct PanelStorageInsights: View {
             .controlSize(.small)
             .tint(confirming == folder.id ? .red : nil)
             .disabled(xcodeOpen)
-            .help(xcodeOpen ? "Quit Xcode first: it builds into this folder." : "Xcode rebuilds it the next time it needs it.")
+            .help(xcodeOpen ? String(localized: "Quit Xcode first: it builds into this folder.")
+                            : String(localized: "Xcode rebuilds it the next time it needs it."))
         }
     }
 
@@ -337,7 +345,7 @@ struct PanelStorageInsights: View {
 
     private static func day(_ date: Date) -> String {
         let calendar = Calendar.current
-        if calendar.isDateInYesterday(date) { return "yesterday" }
+        if calendar.isDateInYesterday(date) { return String(localized: "yesterday") }
         if calendar.isDateInToday(date) { return HistoryAxis.clock(date) }
         return date.formatted(.dateTime.weekday(.wide))
     }

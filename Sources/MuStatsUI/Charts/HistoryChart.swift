@@ -488,8 +488,8 @@ public struct HistoryChart: View {
             return [prefix + peak, lead.joined()]
         }
         let primary = window.primary
-        let average = "avg \(window.string(primary.average, using: formatter))"
-        let maximum = "max \(window.string(primary.maximum, using: formatter))"
+        let average = String(localized: "avg \(window.string(primary.average, using: formatter))")
+        let maximum = String(localized: "max \(window.string(primary.maximum, using: formatter))")
         let explained = primary.peakNote.map { "\(maximum) \($0)" } ?? maximum
         var tiers: [String]
         if let secondary = window.secondary {
@@ -502,7 +502,7 @@ public struct HistoryChart: View {
                 "\(prefix)\(maximum)",
             ]
         } else {
-            let minimum = "min \(window.string(primary.minimum, using: formatter))"
+            let minimum = String(localized: "min \(window.string(primary.minimum, using: formatter))")
             tiers = [
                 "\(prefix)\(minimum)  \(average)  \(explained)",
                 "\(prefix)\(average)  \(explained)",

@@ -117,6 +117,12 @@ enum RenderCLI {
                     exit(2)
                 }
                 settings.panel.collapsedModules.subtract(parsed)
+            // `--language it` renders in Italian. Set in the argument domain, the one the
+            // bundle reads its preferred languages from, before anything is looked up.
+            case "--language":
+                index += 1
+                let code = arguments[safe: index] ?? "en"
+                UserDefaults.standard.setVolatileDomain(["AppleLanguages": [code]], forName: UserDefaults.argumentDomain)
             case "--scenario":
                 index += 1
                 guard let scenario = OffscreenRenderer.Scenario(rawValue: arguments[safe: index] ?? "") else {

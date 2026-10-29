@@ -136,32 +136,32 @@ extension ThresholdAlert {
 
     var title: String {
         switch metric {
-        case .cpuUsage: return "CPU usage is high"
-        case .memoryPressure: return "Memory pressure is high"
-        case .diskFree: return "Startup disk is running out of space"
-        case .batteryLow: return "Battery is low"
-        case .batteryFull: return "Battery is charged"
-        case .cpuTemperature: return "CPU is running hot"
-        case .thermalPressure: return "This Mac is under thermal pressure"
+        case .cpuUsage: return String(localized: "CPU usage is high")
+        case .memoryPressure: return String(localized: "Memory pressure is high")
+        case .diskFree: return String(localized: "Startup disk is running out of space")
+        case .batteryLow: return String(localized: "Battery is low")
+        case .batteryFull: return String(localized: "Battery is charged")
+        case .cpuTemperature: return String(localized: "CPU is running hot")
+        case .thermalPressure: return String(localized: "This Mac is under thermal pressure")
         }
     }
 
     var body: String {
         switch metric {
         case .cpuUsage:
-            return "CPU is at \(percent(value)), above your \(percent(threshold)) threshold."
+            return String(localized: "CPU is at \(percent(value)), above your \(percent(threshold)) threshold.")
         case .memoryPressure:
-            return "Memory pressure is at \(percent(value)), above your \(percent(threshold)) threshold."
+            return String(localized: "Memory pressure is at \(percent(value)), above your \(percent(threshold)) threshold.")
         case .diskFree:
-            return "\(gigabytes(value)) free on the startup disk, below your \(gigabytes(threshold)) threshold."
+            return String(localized: "\(gigabytes(value)) free on the startup disk, below your \(gigabytes(threshold)) threshold.")
         case .batteryLow:
-            return "Battery is at \(percent(value)), below your \(percent(threshold)) threshold."
+            return String(localized: "Battery is at \(percent(value)), below your \(percent(threshold)) threshold.")
         case .batteryFull:
-            return "Battery is at \(percent(value)). You can unplug."
+            return String(localized: "Battery is at \(percent(value)). You can unplug.")
         case .cpuTemperature:
-            return "CPU is at \(degrees(value)), above your \(degrees(threshold)) threshold."
+            return String(localized: "CPU is at \(degrees(value)), above your \(degrees(threshold)) threshold.")
         case .thermalPressure:
-            return "Thermal pressure is \(level(value)), at or past your \(level(threshold)) threshold."
+            return String(localized: "Thermal pressure is \(level(value)), at or past your \(level(threshold)) threshold.")
         }
     }
 

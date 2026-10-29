@@ -122,8 +122,8 @@ public final class ThresholdMonitor {
            let current = engine.snapshot.network.value?.publicIP.value {
             if let last = lastSeenPublicIP, last != current {
                 authority.post(identifier: "network.publicIP",
-                               title: "Public IP changed",
-                               body: "Now \(current), previously \(last).")
+                               title: String(localized: "Public IP changed"),
+                               body: String(localized: "Now \(current), previously \(last)."))
                 WindowLog.log("notification posted metric=publicIP value=\(current) previous=\(last)")
             }
             lastSeenPublicIP = current
@@ -137,9 +137,9 @@ public final class ThresholdMonitor {
             let online = network.connectionType != .none
             if let last = lastSeenConnectivity, last != online {
                 authority.post(identifier: "network.connectivity",
-                               title: online ? "Back online" : "Internet connection lost",
-                               body: online ? "\(network.connectionType.label) is connected again."
-                                            : "The primary interface is down.")
+                               title: online ? String(localized: "Back online") : String(localized: "Internet connection lost"),
+                               body: online ? String(localized: "\(network.connectionType.label) is connected again.")
+                                            : String(localized: "The primary interface is down."))
                 WindowLog.log("notification posted metric=connectivity online=\(online)")
             }
             lastSeenConnectivity = online

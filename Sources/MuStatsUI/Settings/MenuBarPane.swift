@@ -95,7 +95,7 @@ struct MenuBarPane: View {
                     readoutRow(item, index: index)
                 }
                 .draggable(item.id.uuidString) {
-                    Text(item.metric.label).padding(Design.Space.xs)
+                    Text(localizing: item.metric.label).padding(Design.Space.xs)
                 }
                 .dropDestination(for: String.self) { payload, _ in
                     dropTarget = nil
@@ -133,7 +133,7 @@ struct MenuBarPane: View {
                     label: "\(item.metric.label) metric") {
                 Picker("Metric", selection: metricBinding(for: item)) {
                     ForEach(MenuBarMetric.allCases, id: \.self) { metric in
-                        Text(metric.label).tag(metric)
+                        Text(localizing: metric.label).tag(metric)
                     }
                 }
                 .pickerStyle(.inline)
@@ -185,7 +185,7 @@ struct MenuBarPane: View {
                 label: "\(item.metric.label) display style") {
             Picker("Display as", selection: styleBinding(for: item)) {
                 ForEach(item.metric.supportedStyles, id: \.self) { style in
-                    Text(style.label).tag(style)
+                    Text(localizing: style.label).tag(style)
                 }
             }
             .pickerStyle(.inline)

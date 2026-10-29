@@ -100,31 +100,31 @@ struct PanelInsight: Equatable {
         case .cpu:
             let busy = engine.cpu.value.map { formatter.percent($0.total.busy) } ?? ""
             let top = PanelCulprit.top(processes, by: \.cpuPercent)
-            return PanelInsight(level: level, module: module, headline: "CPU at \(busy)",
+            return PanelInsight(level: level, module: module, headline: String(localized: "CPU at \(busy)"),
                                 detail: top.map { "\($0.name) \(formatter.unclampedPercent($0.value, decimals: 0))" })
         case .memory:
             let pressure = engine.memory.value.map { formatter.percent($0.pressureFraction) } ?? ""
             let top = PanelCulprit.top(processes) { Double($0.memoryBytes) }
-            return PanelInsight(level: level, module: module, headline: "Memory pressure \(pressure)",
+            return PanelInsight(level: level, module: module, headline: String(localized: "Memory pressure \(pressure)"),
                                 detail: top.map { "\($0.name) \(formatter.memory($0.value))" })
         case .thermal:
             let celsius = engine.thermal.value?.cpuCelsius.map { formatter.temperature($0) }
             let top = PanelCulprit.top(processes, by: \.cpuPercent)
             return PanelInsight(level: level, module: module,
-                                headline: celsius.map { "Running hot at \($0)" } ?? "Running hot",
+                                headline: celsius.map { String(localized: "Running hot at \($0)") } ?? String(localized: "Running hot"),
                                 detail: top.map { "\($0.name) \(formatter.unclampedPercent($0.value, decimals: 0))" })
         case .battery:
             let power = engine.power.value
             let pct = power?.percentage.map { formatter.percentValue($0) } ?? ""
-            return PanelInsight(level: level, module: module, headline: "Battery at \(pct)",
-                                detail: power?.timeToEmpty.map { formatter.duration($0) + " left" })
+            return PanelInsight(level: level, module: module, headline: String(localized: "Battery at \(pct)"),
+                                detail: power?.timeToEmpty.map { String(localized: "\(formatter.duration($0)) left") })
         case .disk:
             let free = engine.disk.value?.rootVolume.map { formatter.storage($0.availableBytes) }
-            return PanelInsight(level: level, module: module, headline: "Startup disk almost full",
-                                detail: free.map { "\($0) free" })
+            return PanelInsight(level: level, module: module, headline: String(localized: "Startup disk almost full"),
+                                detail: free.map { String(localized: "\($0) free") })
         case .gpu:
             let util = engine.gpu.value?.primary?.utilization.map { formatter.percent($0) } ?? ""
-            return PanelInsight(level: level, module: module, headline: "GPU at \(util)", detail: nil)
+            return PanelInsight(level: level, module: module, headline: String(localized: "GPU at \(util)"), detail: nil)
         case .network, .processes, .system:
             return quiet
         }

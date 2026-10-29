@@ -348,17 +348,29 @@ extension PanelModuleView {
     /// Whose fault a slow connection is, said as a sentence under the numbers it is
     /// worked out from, with a mark that says at a glance whether to read it.
     private func diagnosisRow(_ diagnosis: NetworkDiagnosis, wifi: Bool) -> some View {
-        let link = wifi ? "Wi-Fi" : "local network"
+        // Whole sentences per case, so each can be translated as a sentence rather
+        // than assembled from parts that only fit together in English.
         let (symbol, color, text): (String, Color, String) = {
             switch diagnosis {
             case .healthy:
-                return ("checkmark.circle.fill", .green, "The \(link) and the internet both look healthy.")
+                return ("checkmark.circle.fill", .green,
+                        wifi ? String(localized: "The Wi-Fi and the internet both look healthy.")
+                             : String(localized: "The local network and the internet both look healthy."))
             case .localLink(let rtt, let loss):
-                let detail = loss >= 0.05 ? "loses \(formatter.percent(loss)) of packets"
-                                          : "takes \(rtt.map { formatter.milliseconds($0) } ?? "long") to answer"
-                return ("wifi.exclamationmark", .orange, "The \(link) is the bottleneck: the router \(detail).")
+                if loss >= 0.05 {
+                    let lost = formatter.percent(loss)
+                    return ("wifi.exclamationmark", .orange,
+                            wifi ? String(localized: "The Wi-Fi is the bottleneck: the router loses \(lost) of packets.")
+                                 : String(localized: "The local network is the bottleneck: the router loses \(lost) of packets."))
+                }
+                let time = rtt.map { formatter.milliseconds($0) } ?? "?"
+                return ("wifi.exclamationmark", .orange,
+                        wifi ? String(localized: "The Wi-Fi is the bottleneck: the router takes \(time) to answer.")
+                             : String(localized: "The local network is the bottleneck: the router takes \(time) to answer."))
             case .provider:
-                return ("exclamationmark.triangle.fill", .orange, "The \(link) is fine. The slowdown is past your router, at your provider.")
+                return ("exclamationmark.triangle.fill", .orange,
+                        wifi ? String(localized: "The Wi-Fi is fine. The slowdown is past your router, at your provider.")
+                             : String(localized: "The local network is fine. The slowdown is past your router, at your provider."))
             }
         }()
         return HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
@@ -512,16 +524,16 @@ extension PanelModuleView {
               let gain = BatteryForecast.gain(timeLeft: left, draw: draw, processWatts: top.energyImpact ?? 0),
               gain >= BatteryForecast.worthSaying else { return nil }
         let name = PanelCulprit.appName(for: top)
-        return "Quitting \(name) would add about \(formatter.uptime(gain)) of battery."
+        return String(localized: "Quitting \(name) would add about \(formatter.uptime(gain)) of battery.")
     }
 
     /// The answer the battery is opened for, how long, set larger than the rows under
     /// it, with what the charger is doing beside it and the charge as a bar beneath.
     private func batteryOutlook(_ power: PowerSnapshot, percentage: Double) -> some View {
-        let state = chargeState(power) ?? (power.isPluggedIn ? "On power adapter" : "On battery")
+        let state = chargeState(power) ?? (power.isPluggedIn ? String(localized: "On power adapter") : String(localized: "On battery"))
         let outlook: String = {
-            if power.isCharging, let toFull = power.timeToFull { return "Full in " + formatter.duration(toFull) }
-            if !power.isPluggedIn, let toEmpty = power.timeToEmpty { return formatter.duration(toEmpty) + " left" }
+            if power.isCharging, let toFull = power.timeToFull { return String(localized: "Full in \(formatter.duration(toFull))") }
+            if !power.isPluggedIn, let toEmpty = power.timeToEmpty { return String(localized: "\(formatter.duration(toEmpty)) left") }
             return state
         }()
         return VStack(alignment: .leading, spacing: Design.Space.xs) {
@@ -617,9 +629,9 @@ extension PanelModuleView {
     /// What the charger is doing, in the words the system's battery menu uses. Nil on
     /// battery, where "Time left" already says it.
     private func chargeState(_ power: PowerSnapshot) -> String? {
-        if power.isCharging { return power.isChargingSlowly ? "Charging slowly" : "Charging" }
-        if power.isFullyCharged, power.isPluggedIn { return "Charged" }
-        if power.isOptimizedChargingPaused { return "Charging on hold" }
+        if power.isCharging { return power.isChargingSlowly ? String(localized: "Charging slowly") : String(localized: "Charging") }
+        if power.isFullyCharged, power.isPluggedIn { return String(localized: "Charged") }
+        if power.isOptimizedChargingPaused { return String(localized: "Charging on hold") }
         return nil
     }
 

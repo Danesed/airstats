@@ -719,7 +719,11 @@ public struct CalmReading: Equatable, Sendable {
         } else {
             level = .calm
         }
-        let state = level == .calm ? "all normal" : (level == .warning ? "needs attention" : "under heavy load")
-        accessibilityLabel = "μStats, load \(formatter.percent(raw)), \(state)"
+        let load = formatter.percent(raw)
+        switch level {
+        case .calm: accessibilityLabel = String(localized: "μStats, load \(load), all normal")
+        case .warning: accessibilityLabel = String(localized: "μStats, load \(load), needs attention")
+        case .critical: accessibilityLabel = String(localized: "μStats, load \(load), under heavy load")
+        }
     }
 }
