@@ -311,31 +311,23 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         self.showsBatteryPercentage = showsBatteryPercentage
     }
 
-    /// CPU, its temperature, GPU, and the battery.
+    /// CPU, memory and disk as captioned bars, the CPU temperature as a number, and
+    /// network as a stacked pair.
     ///
-    /// Network throughput stays out: it is by far the widest element — two values plus
-    /// units — and a menu bar item wider than everything Apple ships gets silently
-    /// dropped on a notched display when a few other extras are present. It is one
-    /// click away in Settings for those who want it.
+    /// The three bars pack into one group, so the resources that fill up read
+    /// together at a glance. Temperature is a reading rather than a level, so it
+    /// stays a number. Network is two directions, and stacked they cost the width
+    /// of one readout.
     ///
-    /// The three numbers carry their name above their number rather than an icon beside
-    /// it. An icon is a guess the reader has to make — a chip glyph is CPU to whoever
-    /// drew it and "some hardware" to everyone else — while "CPU" is four narrow
-    /// characters set at eight points, above the number, in a column the number was
-    /// already paying for. No sparkline: at 34pt wide it reads as a scribble, and it
-    /// was the single widest element left.
-    ///
-    /// The battery is the exception and takes no caption and no number. It draws as the
-    /// system's own indicator, which every user already reads without being told what
-    /// it is or what the fill means.
-    ///
-    /// Only a fresh install sees this. Anyone with a settings file already has their own
-    /// `menuBar.items` and keeps them.
+    /// The battery is listed but off: one click in Settings brings back the system's
+    /// own indicator for those on a laptop who want it.
     public static let defaultItems: [MenuBarItemConfig] = [
-        MenuBarItemConfig(metric: .cpuUsage, style: .text, showsCaption: true),
+        MenuBarItemConfig(metric: .cpuUsage, style: .bar, showsCaption: true),
+        MenuBarItemConfig(metric: .memoryUsage, style: .bar, showsCaption: true),
+        MenuBarItemConfig(metric: .diskUsage, style: .bar, showsCaption: true),
         MenuBarItemConfig(metric: .cpuTemperature, style: .text, showsCaption: true),
-        MenuBarItemConfig(metric: .gpuUsage, style: .text, showsCaption: true),
-        MenuBarItemConfig(metric: .battery, style: .battery, showsCaption: false),
+        MenuBarItemConfig(metric: .networkThroughput, style: .stackedPair, showsCaption: true),
+        MenuBarItemConfig(metric: .battery, style: .battery, isEnabled: false, showsCaption: false),
     ]
 
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }

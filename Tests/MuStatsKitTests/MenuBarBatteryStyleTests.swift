@@ -52,20 +52,21 @@ struct BatteryStyleAvailabilityTests {
     }
 }
 
-@Suite("The shipped menu bar is CPU, temperature, GPU and the battery")
+@Suite("The default menu bar is CPU, memory and disk bars, temperature and network")
 struct MenuBarDefaultItemsTests {
 
-    @Test("four readouts, in order")
+    @Test("five readouts on, in order, and the battery listed but off")
     func defaultsAreInOrder() {
         #expect(MenuBarSettings.defaultItems.map(\.metric)
-                == [.cpuUsage, .cpuTemperature, .gpuUsage, .battery])
+                == [.cpuUsage, .memoryUsage, .diskUsage, .cpuTemperature, .networkThroughput, .battery])
+        #expect(MenuBarSettings.defaultItems.map(\.isEnabled) == [true, true, true, true, true, false])
     }
 
-    @Test("the battery ships as the indicator, the rest as captioned numbers")
+    @Test("bars for the levels, a number for the temperature, a pair for network")
     func defaultStyles() {
-        let items = MenuBarSettings.defaultItems
-        #expect(items.dropLast().allSatisfy { $0.style == .text && $0.showsCaption })
-        #expect(items.last?.style == .battery)
+        #expect(MenuBarSettings.defaultItems.map(\.style)
+                == [.bar, .bar, .bar, .text, .stackedPair, .battery])
+        #expect(MenuBarSettings.defaultItems.dropLast().allSatisfy { $0.showsCaption })
     }
 
     /// Every default has to survive the clamp, or a fresh install would silently start
