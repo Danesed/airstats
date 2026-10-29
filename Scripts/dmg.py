@@ -8,7 +8,7 @@ than by scripting Finder, so this works with no Automation grant and no window o
 Coordinates are icon centres and must agree with Scripts/dmg-background.py, which draws
 the arrow into the gap between them. Change one and re-run the other.
 
-    uv run --with dmgbuild dmgbuild -s Scripts/dmg.py -D app=<path> "AirStats" out.dmg
+    uv run --with dmgbuild dmgbuild -s Scripts/dmg.py -D app=<path> "muStats" out.dmg
 """
 
 import os.path

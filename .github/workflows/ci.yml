@@ -25,7 +25,7 @@ jobs:
         run: Scripts/build.sh
 
       - name: Render every surface
-        run: .build/debug/AirStats --render --out render
+        run: .build/debug/muStats --render --out render
 
       - uses: actions/upload-artifact@v4
         with:

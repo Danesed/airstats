@@ -5,23 +5,23 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>AirStats</string>
+	<string>μStats</string>
 	<key>CFBundleExecutable</key>
-	<string>AirStats</string>
+	<string>muStats</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.airstat.AirStats</string>
+	<string>com.danesed.muStats</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>AirStats</string>
+	<string>μStats</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.6</string>
+	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>11</string>
+	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -29,7 +29,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>AirStats</string>
+	<string>μStats by Danesed, a fork of AirStats by Byren Cheema</string>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
 	<key>NSSupportsSuddenTermination</key>
@@ -37,11 +37,9 @@
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<false/>
 	<key>SUFeedURL</key>
-	<string>https://airstats.app/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>Qhygt891m7jN7eTbSK4OKLjHwzU9HEOvRyJtSoib8kM=</string>
+	<string>https://github.com/Danesed/muStats/releases/latest/download/appcast.xml</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>604800</integer>
 </dict>

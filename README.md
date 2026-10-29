@@ -5,7 +5,7 @@
   <img src="docs/logo-light.png" alt="" width="104">
 </picture>
 
-<h3>AirStats</h3>
+<h3>μStats</h3>
 
 An ultra lightweight macOS system monitor.
 
@@ -13,15 +13,24 @@ An ultra lightweight macOS system monitor.
 
 </div>
 
-AirStats is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
+μStats is a system monitor for the Mac menu bar. It reads CPU, memory, GPU, network,
 disk, battery, temperature, process and host statistics from the kernel and shows them in
 three places: the menu bar itself, a panel that drops down when you click the status item,
 and a desktop widget you can leave on screen.
 
-It is built to be genuinely light. A menu bar monitor runs all day, every day, so AirStats
+It is built to be genuinely light. A menu bar monitor runs all day, every day, so μStats
 holds a few megabytes and a fraction of a percent of one core rather than the tens of
 megabytes its peers take. It has no Dock icon, and reads the system through Mach, IOKit,
 sysctl and CoreWLAN.
+
+## Origins
+
+μStats is a fork of [AirStats](https://github.com/byrencheema/airstats) by Byren Cheema,
+released under the MIT license. It started from AirStats and went its own way: a
+menu bar battery that matches the system one, sharper rendering across mixed-resolution
+displays, a redesigned panel with grouped cards, a summary line that names what is wrong
+and who is causing it, per-process energy, and a Today view of the day's notable events.
+Thanks to Byren for the foundation it is built on.
 
 ## Requirements
 
@@ -30,18 +39,11 @@ sysctl and CoreWLAN.
 
 ## Install
 
-Download it from [airstats.app](https://airstats.app), open the dmg and drag the app to
-Applications. It is signed and notarized, so it opens with no warning.
+Releases will be published on GitHub, signed and notarized, together with a Homebrew
+cask. Until then, build it from source.
 
-Or with Homebrew:
-
-```sh
-brew install --cask airstats
-```
-
-AirStats updates itself with [Sparkle](https://sparkle-project.org). It asks airstats.app
-once a week whether a newer version exists, and installs one only when you say so. Both of
-those can be turned off in General settings.
+μStats updates itself with [Sparkle](https://sparkle-project.org) from its GitHub
+releases, and installs a new version only when you say so.
 
 ## Build from source
 
@@ -49,8 +51,8 @@ You need Xcode 26 or later: the app draws Liquid Glass, which needs the macOS 26
 
 ```sh
 Scripts/build.sh release
-cp -R .build/release/AirStats.app /Applications/
-open /Applications/AirStats.app
+ditto .build/out/Products/Release/muStats.app /Applications/muStats.app
+open /Applications/muStats.app
 ```
 
 `Scripts/build.sh` wraps the SwiftPM binary in a `.app` bundle, copies `Sparkle.framework`
@@ -66,16 +68,16 @@ notarization ticket to the `.dmg`.
 
 | Path | What lives there |
 | --- | --- |
-| `Sources/AirStatKit` | Collectors, the sampling engine, settings, formatting. No UI. |
-| `Sources/AirStatUI` | Menu bar drawing, panel, desktop widget, settings window, charts, design system. |
-| `Sources/AirStats` | The executable, app delegate, and the probe and render commands. |
-| `Tests/AirStatKitTests` | Contract tests for the collectors, plus settings and formatting. |
+| `Sources/MuStatsKit` | Collectors, the sampling engine, settings, formatting. No UI. |
+| `Sources/MuStatsUI` | Menu bar drawing, panel, desktop widget, settings window, charts, design system. |
+| `Sources/MuStats` | The executable, app delegate, and the probe and render commands. |
+| `Tests/MuStatsKitTests` | Contract tests for the collectors, plus settings and formatting. |
 | `Scripts/build.sh` | Builds the binary and assembles the `.app`. |
-| `Scripts/release.sh` | Signs, notarizes and packages the `.dmg` that ships. |
+| `Scripts/release.sh` | Signs, notarizes and packages the `.dmg` for release. |
 | `Scripts/appcast.py` | Writes a release into the appcast Sparkle reads. |
 | `Scripts/benchmark.py` | Samples the menu bar monitors on your Mac over one shared window. |
 
-`AirStatKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
+`MuStatsKit` never imports SwiftUI or AppKit, which is what lets the tests and the probe
 run in a windowless process.
 
 ## Contributing
@@ -85,9 +87,8 @@ house rules.
 
 ## Contact
 
-Bugs and feature requests go on the [issue tracker](https://github.com/byrencheema/airstats/issues).
-For anything private, email [hello@airstats.app](mailto:hello@airstats.app).
+Bugs and feature requests go on the GitHub issue tracker.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE), which keeps the original AirStats copyright as the license requires.

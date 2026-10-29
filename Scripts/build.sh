@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds AirStats and assembles a launchable .app bundle.
+# Builds μStats and assembles a launchable .app bundle.
 #
 # SwiftPM cannot produce an app bundle, and a menu bar app needs one: LSUIElement,
 # a bundle identifier for UserDefaults and notifications, and a code signature so
@@ -15,21 +15,21 @@ CONFIG="${1:-debug}"
 swift build -c "$CONFIG" "${@:2}"
 
 BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
-APP="$BIN_DIR/AirStats.app"
+APP="$BIN_DIR/muStats.app"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 
-cp "$BIN_DIR/AirStats" "$APP/Contents/MacOS/AirStats"
+cp "$BIN_DIR/muStats" "$APP/Contents/MacOS/muStats"
 
 # SwiftPM's swiftbuild backend (the default from Xcode 27) links with the deployment
 # target as the SDK version, so the binary claims it was built against macOS 14.
 # AppKit reads that claim to decide whether the app gets the current system design or
 # the compatibility look, so it is put back to the SDK the build actually used.
-MIN_OS="$(vtool -show-build "$APP/Contents/MacOS/AirStats" | awk '/minos/ { print $2 }')"
+MIN_OS="$(vtool -show-build "$APP/Contents/MacOS/muStats" | awk '/minos/ { print $2 }')"
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 vtool -set-build-version macos "$MIN_OS" "$SDK_VERSION" -replace \
-  -output "$APP/Contents/MacOS/AirStats" "$APP/Contents/MacOS/AirStats"
+  -output "$APP/Contents/MacOS/muStats" "$APP/Contents/MacOS/muStats"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
@@ -44,7 +44,7 @@ fi
 #
 # Named exactly rather than globbed: a tree built under an earlier package name leaves
 # that name's bundle in the bin directory forever, and a glob ships both.
-BUNDLE="$BIN_DIR/AirStats_AirStatUI.bundle"
+BUNDLE="$BIN_DIR/muStats_MuStatsUI.bundle"
 if [ -d "$BUNDLE" ]; then
   cp -R "$BUNDLE" "$APP/Contents/Resources/"
 else
@@ -53,7 +53,7 @@ else
 fi
 
 # Sparkle is a framework, and the binary asks for it at @rpath. SwiftPM leaves a copy
-# beside the binary, which is why the bare `.build/debug/AirStats` runs; the bundle
+# beside the binary, which is why the bare `.build/debug/muStats` runs; the bundle
 # needs its own, because the executable inside it resolves @rpath through
 # @executable_path/../Frameworks (see Package.swift).
 #

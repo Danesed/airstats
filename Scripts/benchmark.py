@@ -4,7 +4,7 @@
 # ///
 """Measure what menu bar monitors cost while they sit there.
 
-    uv run Scripts/benchmark.py                      # AirStats against whatever else is running
+    uv run Scripts/benchmark.py                      # μStats against whatever else is running
     uv run Scripts/benchmark.py --samples 160        # the count the write-up used
     uv run Scripts/benchmark.py --group Foo=Foo,Bar  # measure some other app
 
@@ -43,7 +43,7 @@ import sys
 # process whose name matches any of its patterns. iStat Menus ships a status bar app and
 # a daemon, which is why its row in the write-up is labelled a suite.
 DEFAULT_GROUPS = {
-    "AirStats": ["AirStats"],
+    "muStats": ["muStats"],
     "Stats": ["Stats"],
     "iStat Menus (suite)": ["iStat Menus*", "iStatMenus*"],
 }
@@ -56,7 +56,7 @@ def find_pids(patterns):
 
     A pattern matches the whole process name, or its beginning when it ends in `*`.
     Substring matching is deliberately not offered: `Stats` occurs inside both
-    `systemstats` and `AirStats`, so a looser rule silently sums the app under test
+    `systemstats` and `μStats`, so a looser rule silently sums the app under test
     into the app it is being compared against and reports the total as the rival's
     cost. The wildcard exists for suites whose helpers share a prefix, and for names
     long enough that `ps` truncates them.

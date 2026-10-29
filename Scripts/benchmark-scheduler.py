@@ -108,7 +108,7 @@ print(" failure=\(runFailure{index}()), suspended=\(runHealthy{index}(suspended{
 
 
 def source_body(root: Path, class_name: str) -> str:
-    path = root / "Sources/AirStatKit/Core/SamplingCore.swift"
+    path = root / "Sources/MuStatsKit/Core/SamplingCore.swift"
     source = path.read_text()
     start = source.index("final class SourceSlot")
     end = source.index("\n/// Owns every collector", start)
@@ -121,7 +121,7 @@ def run(root: Path, index: int, ticks: int, suspend_start: int, suspend_end: int
     class_name = f"Slot{index}"
     runner = RUNNER_TEMPLATE.format(index=index, ticks=ticks,
                                     suspend_start=suspend_start, suspend_end=suspend_end)
-    with tempfile.TemporaryDirectory(prefix="airstats-scheduler-") as directory:
+    with tempfile.TemporaryDirectory(prefix="mustats-scheduler-") as directory:
         directory_path = Path(directory)
         swift = directory_path / "benchmark.swift"
         binary = directory_path / "benchmark"
@@ -140,7 +140,7 @@ def run(root: Path, index: int, ticks: int, suspend_start: int, suspend_end: int
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", action="append", type=Path, required=True,
-                        help="source root containing Sources/AirStatKit/Core/SamplingCore.swift (repeatable)")
+                        help="source root containing Sources/MuStatsKit/Core/SamplingCore.swift (repeatable)")
     parser.add_argument("--ticks", type=int, default=300)
     parser.add_argument("--suspend-start", type=int, default=100)
     parser.add_argument("--suspend-end", type=int, default=150)

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "AirStats",
+    name: "muStats",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "AirStats", targets: ["AirStats"]),
-        .library(name: "AirStatKit", targets: ["AirStatKit"]),
-        .library(name: "AirStatUI", targets: ["AirStatUI"]),
+        .executable(name: "muStats", targets: ["MuStats"]),
+        .library(name: "MuStatsKit", targets: ["MuStatsKit"]),
+        .library(name: "MuStatsUI", targets: ["MuStatsUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
@@ -17,7 +17,7 @@ let package = Package(
         // queue-confined by construction (see SamplingCore) rather than by the type
         // system, and the low-level Mach/IOKit code they wrap is not Sendable-clean.
         .target(
-            name: "AirStatKit",
+            name: "MuStatsKit",
             swiftSettings: [.swiftLanguageMode(.v5)],
             linkerSettings: [
                 .linkedFramework("IOKit"),
@@ -26,14 +26,14 @@ let package = Package(
             ]
         ),
         .target(
-            name: "AirStatUI",
-            dependencies: ["AirStatKit", .product(name: "Sparkle", package: "Sparkle")],
+            name: "MuStatsUI",
+            dependencies: ["MuStatsKit", .product(name: "Sparkle", package: "Sparkle")],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .executableTarget(
-            name: "AirStats",
-            dependencies: ["AirStatKit", "AirStatUI", .product(name: "Sparkle", package: "Sparkle")],
+            name: "MuStats",
+            dependencies: ["MuStatsKit", "MuStatsUI", .product(name: "Sparkle", package: "Sparkle")],
             swiftSettings: [.swiftLanguageMode(.v5)],
             // Sparkle ships as a framework, and Scripts/build.sh puts it in
             // Contents/Frameworks. Without this the binary looks only where SwiftPM
@@ -42,13 +42,13 @@ let package = Package(
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])
             ]
         ),
-        // Named for AirStatKit because that is where almost everything under test
-        // lives, but it also links AirStatUI: the pieces of UI logic worth testing
+        // Named for MuStatsKit because that is where almost everything under test
+        // lives, but it also links MuStatsUI: the pieces of UI logic worth testing
         // are the pure ones (threshold evaluation, render models), and giving them a
         // second test target would split the suite for no gain.
         .testTarget(
-            name: "AirStatKitTests",
-            dependencies: ["AirStatKit", "AirStatUI"],
+            name: "MuStatsKitTests",
+            dependencies: ["MuStatsKit", "MuStatsUI"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

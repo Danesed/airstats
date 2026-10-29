@@ -1,8 +1,8 @@
 #!/bin/bash
-# Signs, notarizes and packages AirStats as a .dmg users can download and open.
+# Signs, notarizes and packages μStats as a .dmg users can download and open.
 #
 # Scripts/build.sh signs ad-hoc, which proves only that the bundle is intact. macOS
-# refuses an ad-hoc bundle that arrived over the internet outright ("AirStats is
+# refuses an ad-hoc bundle that arrived over the internet outright ("μStats is
 # damaged"), so distribution needs a real Developer ID signature, Apple's notarization
 # ticket, and that ticket stapled onto the file so it validates with no network.
 #
@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 ROOT="$PWD"
 
 IDENTITY="${SIGN_IDENTITY:-Developer ID Application}"
-PROFILE="${NOTARY_PROFILE:-AirStats}"
+PROFILE="${NOTARY_PROFILE:-muStats}"
 DIST="dist"
 
 # Sparkle ships generate_keys and sign_update alongside the framework SwiftPM fetched,
@@ -27,16 +27,16 @@ SPARKLE_BIN="${SPARKLE_BIN:-.build/artifacts/sparkle/Sparkle/bin}"
 # The same key `generate_keys -x` wrote, read from the file rather than from the login
 # keychain. sign_update reads the keychain by default and macOS answers that with a
 # dialog no script can click, which stalls the release halfway through notarization.
-SPARKLE_KEY="${SPARKLE_KEY:-$HOME/private_keys/airstats_sparkle_ed25519.key}"
+SPARKLE_KEY="${SPARKLE_KEY:-$HOME/private_keys/mustats_sparkle_ed25519.key}"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
 BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' Resources/Info.plist)"
 
 # Deliberately unversioned. The README and the site both link
-# releases/latest/download/AirStats.dmg, which resolves only against an asset of
+# releases/latest/download/muStats.dmg, which resolves only against an asset of
 # exactly that name, so putting the version in the filename breaks the one URL that
 # never has to be updated. The version lives in the git tag and in the bundle.
-DMG="$DIST/AirStats.dmg"
+DMG="$DIST/muStats.dmg"
 
 # The notes go into the appcast at the very end, after minutes of notarization, so a
 # version the site's changelog has no entry for is refused here instead.
@@ -88,7 +88,7 @@ fi
 if [ ! -f "$SPARKLE_KEY" ]; then
   echo "error: no Sparkle private key at '$SPARKLE_KEY'." >&2
   echo "  It is the file $SPARKLE_BIN/generate_keys -x wrote. Without it no copy" >&2
-  echo "  of AirStats in the field will accept this build as an update." >&2
+  echo "  of μStats in the field will accept this build as an update." >&2
   exit 1
 fi
 
@@ -129,7 +129,7 @@ codesign --verify --strict --deep "$APP"
 # Notarize the app itself before packaging so the ticket can be stapled into the
 # bundle. Stapling only the .dmg leaves the copy the user drags to /Applications
 # without a ticket, and its first launch then needs a working network to verify.
-ZIP="$DIST/AirStats-app.zip"
+ZIP="$DIST/muStats-app.zip"
 mkdir -p "$DIST"
 rm -f "$ZIP" "$DMG"
 ditto -c -k --keepParent "$APP" "$ZIP"
@@ -153,7 +153,7 @@ uv run --with dmgbuild dmgbuild \
   -s "$ROOT/Scripts/dmg.py" \
   -D app="$APP" \
   -D root="$ROOT" \
-  "AirStats" "$DMG" 2> >(grep -v "^hdiutil: WARNING: .* is deprecated" >&2) >/dev/null
+  "μStats" "$DMG" 2> >(grep -v "^hdiutil: WARNING: .* is deprecated" >&2) >/dev/null
 
 codesign --force --timestamp --sign "$IDENTITY" "$DMG"
 xcrun notarytool submit "$DMG" --keychain-profile "$PROFILE" --wait
@@ -165,7 +165,7 @@ spctl --assess --type open --context context:primary-signature -v "$DMG"
 
 # A second copy under the version, because the unversioned name is about to be
 # overwritten by the next run and a dmg is minutes of notarization to reproduce.
-cp "$DMG" "$DIST/AirStats-$VERSION.dmg"
+cp "$DMG" "$DIST/muStats-$VERSION.dmg"
 
 # Sparkle installs a dmg only if its EdDSA signature matches the SUPublicEDKey in the
 # copy already running, so this is what makes the file installable rather than merely
@@ -191,9 +191,9 @@ echo "  $SIGNATURE"
 echo
 echo "Next, in this order (docs/RELEASING.md has the reasons):"
 echo "  1. git tag v$VERSION && git push origin v$VERSION"
-echo "  2. gh release create v$VERSION $DMG --title \"AirStats $VERSION\" --notes-file $DIST/notes-$VERSION.md"
-echo "     The asset must be named AirStats.dmg. The appcast item already points at it."
-echo "  3. brew bump-cask-pr airstats --version $VERSION"
+echo "  2. gh release create v$VERSION $DMG --title \"μStats $VERSION\" --notes-file $DIST/notes-$VERSION.md"
+echo "     The asset must be named muStats.dmg. The appcast item already points at it."
+echo "  3. brew bump-cask-pr mustats --version $VERSION"
 echo "     Skip it if Homebrew's autobump bot already opened one. The sha256 must be $SHA."
 echo "  4. Commit and push public/appcast.xml and src/changelog.json in airstat-site. Do this last: it is what"
 echo "     tells every installed copy to go and download the file from step 2."

@@ -4,7 +4,7 @@
 # ///
 """Put a release into the appcast Sparkle reads.
 
-    uv run Scripts/appcast.py --version 1.1 --build 2 --dmg dist/AirStats.dmg \\
+    uv run Scripts/appcast.py --version 1.1 --build 2 --dmg dist/muStats.dmg \\
         --signature 'sparkle:edSignature="..." length="123"'
 
 `Scripts/release.sh` calls this with what `sign_update` just printed. The file it edits
@@ -13,8 +13,8 @@ push: this writes it and stops there, deliberately, because the appcast going li
 before the GitHub release exists points every installed copy at a download that 404s.
 
 Sparkle's own `generate_appcast` is not used. It derives an appcast from a folder of
-archives and wants each one under its own name, and every AirStats release is called
-AirStats.dmg so that releases/latest/download keeps resolving. One filename and many
+archives and wants each one under its own name, and every μStats release is called
+muStats.dmg so that releases/latest/download keeps resolving. One filename and many
 versions is exactly the shape that tool cannot express.
 
 Items are keyed by build number, replaced rather than duplicated when a version is
@@ -38,7 +38,7 @@ from email.utils import format_datetime
 from pathlib import Path
 
 SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle"
-DOWNLOAD_URL = "https://github.com/byrencheema/airstats/releases/download/v{version}/AirStats.dmg"
+DOWNLOAD_URL = "https://github.com/Danesed/muStats/releases/download/v{version}/muStats.dmg"
 # What Sparkle's Version History button opens. The item's own notes are embedded rather
 # than linked, so the update window never depends on a page having deployed first.
 CHANGELOG_URL = "https://airstats.app/changelog"
@@ -57,9 +57,9 @@ INDENT = "    "
 EMPTY_APPCAST = """<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="{ns}">
     <channel>
-        <title>AirStats</title>
+        <title>μStats</title>
         <link>https://airstats.app</link>
-        <description>AirStats releases.</description>
+        <description>μStats releases.</description>
         <language>en</language>
     </channel>
 </rss>
@@ -209,7 +209,7 @@ def main():
     # nobody can read for the one line that matters.
     body = ET.tostring(tree.getroot(), encoding="unicode")
     args.appcast.write_text(f'<?xml version="1.0" encoding="utf-8"?>\n{body}\n', encoding="utf-8")
-    print(f"appcast.py: wrote AirStats {args.version} (build {args.build}) into {args.appcast}")
+    print(f"appcast.py: wrote μStats {args.version} (build {args.build}) into {args.appcast}")
     if args.notes_out:
         args.notes_out.write_text(markdown(notes), encoding="utf-8")
         print(f"appcast.py: wrote the release notes to {args.notes_out}")
