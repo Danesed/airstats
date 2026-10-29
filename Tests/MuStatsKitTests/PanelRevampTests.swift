@@ -539,7 +539,7 @@ struct NotchModeTests {
         engine.loadFixture(snapshot: SnapshotFixtures.nominal, history: MetricHistory())
         let store = SettingsStore(directory: FileManager.default.temporaryDirectory
             .appendingPathComponent("MuStatsTests-\(UUID().uuidString)"))
-        let view = NotchIslandView(engine: engine, settings: store, notchHeight: 38)
+        let view = NotchIslandView(engine: engine, settings: store, notchHeight: 38, notchWidth: 200)
             .frame(width: 360, height: 108)
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2

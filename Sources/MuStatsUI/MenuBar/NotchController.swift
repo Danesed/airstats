@@ -102,6 +102,12 @@ private final class NotchWindow: NSPanel {
     private let settings: SettingsStore
     private var hosting: NSHostingView<NotchIslandView>?
     private var pending: DispatchWorkItem?
+    /// Watches the pointer while the island is open. The tracking area cannot be
+    /// trusted for leaving: resizing the window rebuilds it, and the rebuild reports
+    /// an exit the pointer never made, which closed the island under the pointer and
+    /// reopened it in a loop. Ten checks a second, and only while open.
+    private var watcher: Timer?
+    private var outsideSince: Date?
 
     /// The open island: wider than the notch, and tall enough for one row of readings.
     private static let openSize = NSSize(width: 360, height: 70)
@@ -122,8 +128,12 @@ private final class NotchWindow: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         isReleasedWhenClosed = false
         let tracker = NotchTrackingView(frame: NSRect(origin: .zero, size: notch.size))
-        tracker.onEnter = { [weak self] in self?.schedule(open: true) }
-        tracker.onExit = { [weak self] in self?.schedule(open: false) }
+        tracker.onEnter = { [weak self] in self?.scheduleOpen() }
+        // While closed, leaving before the wait is up means the pointer was passing by.
+        tracker.onExit = { [weak self] in
+            guard let self, self.hosting == nil else { return }
+            self.pending?.cancel()
+        }
         tracker.onClick = { [weak self] in self?.onClick?() }
         tracker.autoresizingMask = [.width, .height]
         contentView = tracker
@@ -132,14 +142,34 @@ private final class NotchWindow: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    /// A short wait each way: the pointer crossing the notch on its way somewhere
-    /// else should not flash the readings open, and leaving the island for a moment
-    /// should not snap it shut.
-    private func schedule(open: Bool) {
+    override func close() {
+        watcher?.invalidate()
+        watcher = nil
         pending?.cancel()
-        let work = DispatchWorkItem { [weak self] in open ? self?.open() : self?.shut() }
+        super.close()
+    }
+
+    /// A short wait: the pointer crossing the notch on its way somewhere else should
+    /// not flash the readings open.
+    private func scheduleOpen() {
+        guard hosting == nil else { return }
+        pending?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.open() }
         pending = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (open ? 0.18 : 0.35), execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    /// Closes once the pointer has been off the island for a quarter of a second, so
+    /// brushing its edge does not snap it shut.
+    private func checkPointer() {
+        guard hosting != nil else { return }
+        if frame.insetBy(dx: -4, dy: -4).contains(NSEvent.mouseLocation) {
+            outsideSince = nil
+        } else if let since = outsideSince {
+            if Date().timeIntervalSince(since) >= 0.25 { shut() }
+        } else {
+            outsideSince = Date()
+        }
     }
 
     private func open() {
@@ -149,20 +179,29 @@ private final class NotchWindow: NSPanel {
         let frame = NSRect(x: notch.midX - size.width / 2, y: notch.maxY - size.height,
                            width: size.width, height: size.height)
         let view = NSHostingView(rootView: NotchIslandView(engine: engine, settings: settings,
-                                                           notchHeight: notch.height))
+                                                           notchHeight: notch.height,
+                                                           notchWidth: notch.width))
         view.frame = NSRect(origin: .zero, size: size)
         view.autoresizingMask = [.width, .height]
+        view.alphaValue = 0
         tracker.addSubview(view)
         hosting = view
         setFrame(frame, display: true)
-        view.alphaValue = 0
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.18
             view.animator().alphaValue = 1
         }
+        outsideSince = nil
+        let watcher = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkPointer() }
+        }
+        RunLoop.main.add(watcher, forMode: .common)
+        self.watcher = watcher
     }
 
     private func shut() {
+        watcher?.invalidate()
+        watcher = nil
         guard let view = hosting else { return }
         hosting = nil
         NSAnimationContext.runAnimationGroup({ context in
@@ -208,6 +247,7 @@ struct NotchIslandView: View {
     let engine: MetricsEngine
     let settings: SettingsStore
     let notchHeight: CGFloat
+    var notchWidth: CGFloat = 200
 
     var body: some View {
         let formatter = MetricFormatter(settings: settings.settings.general)
@@ -229,10 +269,7 @@ struct NotchIslandView: View {
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(
-            UnevenRoundedRectangle(bottomLeadingRadius: 20, bottomTrailingRadius: 20, style: .continuous)
-                .fill(Color.black)
-        )
+        .background(NotchIslandShape(notchWidth: notchWidth, notchHeight: notchHeight).fill(Color.black))
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .combine)
     }
@@ -263,5 +300,38 @@ struct NotchIslandView: View {
                                   value: f.percentValue(percent), alert: !power.isPluggedIn && percent <= 15))
         }
         return result
+    }
+}
+
+/// The open notch's outline: as wide as the notch through the menu bar, so the icons
+/// either side stay visible, then a panel the window's width beneath it, joined to
+/// the notch by inward curves the way the notch itself meets the screen.
+struct NotchIslandShape: Shape {
+    var notchWidth: CGFloat
+    var notchHeight: CGFloat
+    var radius: CGFloat = 20
+    var joint: CGFloat = 10
+
+    func path(in rect: CGRect) -> Path {
+        let left = rect.midX - notchWidth / 2
+        let right = rect.midX + notchWidth / 2
+        let top = rect.minY + notchHeight
+        var path = Path()
+        path.move(to: CGPoint(x: left, y: rect.minY))
+        path.addLine(to: CGPoint(x: right, y: rect.minY))
+        path.addLine(to: CGPoint(x: right, y: top - joint))
+        path.addQuadCurve(to: CGPoint(x: right + joint, y: top), control: CGPoint(x: right, y: top))
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: top))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX, y: top + radius), control: CGPoint(x: rect.maxX, y: top))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+        path.addQuadCurve(to: CGPoint(x: rect.maxX - radius, y: rect.maxY), control: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - radius), control: CGPoint(x: rect.minX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: top + radius))
+        path.addQuadCurve(to: CGPoint(x: rect.minX + radius, y: top), control: CGPoint(x: rect.minX, y: top))
+        path.addLine(to: CGPoint(x: left - joint, y: top))
+        path.addQuadCurve(to: CGPoint(x: left, y: top - joint), control: CGPoint(x: left, y: top))
+        path.closeSubpath()
+        return path
     }
 }
