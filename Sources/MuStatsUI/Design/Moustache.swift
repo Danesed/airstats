@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The moustache in μStats. "mu-stats" said aloud is half a moustache already, so
-/// it turns up in two places nobody is told about: on the About logo after seven
-/// clicks, and in the menu bar on World Moustache Day.
+/// it turns up in places nobody is told about: on the About logo after seven clicks,
+/// in the menu bar on World Moustache Day, and growing through November.
 public enum Moustache {
     /// Width over height of the drawing's box.
     public static let aspect: CGFloat = 2.4
@@ -46,6 +46,18 @@ public enum Moustache {
     public static func isDay(_ date: Date = Date(), calendar: Calendar = .current) -> Bool {
         let parts = calendar.dateComponents([.month, .day], from: date)
         return parts.month == 9 && parts.day == 26
+    }
+
+    /// How much moustache the menu bar wears today, 0 for none and 1 for all of it.
+    ///
+    /// Full on World Moustache Day. Through November it grows a little each day, the
+    /// way the month is meant to go: about a third on the 1st, all of it on the 30th.
+    /// It never starts smaller than that, because below it the menu bar shows a smudge.
+    public static func growth(on date: Date = Date(), calendar: Calendar = .current) -> Double {
+        if isDay(date, calendar: calendar) { return 1 }
+        let parts = calendar.dateComponents([.month, .day], from: date)
+        guard parts.month == 11, let day = parts.day else { return 0 }
+        return 0.35 + 0.65 * Double(min(max(day, 1), 30) - 1) / 29
     }
 }
 

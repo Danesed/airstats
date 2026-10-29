@@ -124,8 +124,9 @@ public enum OffscreenRenderer {
                                        history: request.scenario.history,
                                        settings: request.settings,
                                        isStale: false)
-        // `MUSTATS_MOUSTACHE=1` renders the bar as it looks on 26 September.
-        model.wearsMoustache = ProcessInfo.processInfo.environment["MUSTATS_MOUSTACHE"] == "1"
+        // `MUSTATS_MOUSTACHE=1` renders the bar as it looks on 26 September; a fraction
+        // such as 0.5 renders it partway through November.
+        model.moustache = Double(ProcessInfo.processInfo.environment["MUSTATS_MOUSTACHE"] ?? "") ?? 0
         let view = MenuBarContentView(frame: .zero)
         view.appearance = appearance
         view.update(with: model)

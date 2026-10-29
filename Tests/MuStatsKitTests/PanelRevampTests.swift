@@ -172,3 +172,34 @@ struct PanelEventTests {
         #expect(PanelEvents.detect(series: s, notes: s, rule: cpu).isEmpty)
     }
 }
+
+@Suite("The moustache keeps its calendar")
+struct MoustacheCalendarTests {
+    private func date(_ month: Int, _ day: Int) -> Date {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar.date(from: DateComponents(year: 2026, month: month, day: day, hour: 12))!
+    }
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        return calendar
+    }
+
+    @Test("full on World Moustache Day, none on an ordinary day")
+    func worldMoustacheDay() {
+        #expect(Moustache.growth(on: date(9, 26), calendar: utc) == 1)
+        #expect(Moustache.growth(on: date(9, 27), calendar: utc) == 0)
+        #expect(Moustache.growth(on: date(12, 1), calendar: utc) == 0)
+    }
+
+    @Test("November grows from about a third on the 1st to all of it on the 30th")
+    func movember() {
+        let first = Moustache.growth(on: date(11, 1), calendar: utc)
+        let middle = Moustache.growth(on: date(11, 15), calendar: utc)
+        let last = Moustache.growth(on: date(11, 30), calendar: utc)
+        #expect(first == 0.35)
+        #expect(middle > first && middle < last)
+        #expect(last == 1)
+    }
+}

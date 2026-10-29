@@ -252,7 +252,7 @@ public final class StatusItemController {
                                        history: engine.history,
                                        settings: settings.settings,
                                        isStale: engine.isStale)
-        model.wearsMoustache = Moustache.isDay()
+        model.moustache = Moustache.growth()
         for entry in hosted {
             let slice = StatusItemController.slice(model, readout: entry.readout)
             // Read out whether or not the drawing changed: a bar's number is spoken but
@@ -312,7 +312,7 @@ public final class StatusItemController {
         var slice = model
         slice.items = model.items.filter { $0.id == readout }
         // One moustache for the whole bar, on the leading readout.
-        slice.wearsMoustache = model.wearsMoustache && model.items.first?.id == readout
+        slice.moustache = model.items.first?.id == readout ? model.moustache : 0
         return slice
     }
 

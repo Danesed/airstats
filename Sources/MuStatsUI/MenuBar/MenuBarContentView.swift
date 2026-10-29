@@ -234,9 +234,9 @@ public final class MenuBarContentView: NSView {
         guard !model.items.isEmpty else { cachedWidth = 0; return }
 
         var content: CGFloat = 0
-        if model.wearsMoustache {
+        if model.moustache > 0 {
             moustacheX = 0
-            content = Layout.moustacheWidth + CGFloat(model.spacing)
+            content = (Layout.moustacheWidth * CGFloat(model.moustache)).rounded() + CGFloat(model.spacing)
         }
         for (index, item) in model.items.enumerated() {
             // Bars pack. Two bars a whole readout apart read as two readouts, and the
@@ -518,10 +518,11 @@ public final class MenuBarContentView: NSView {
 
         context.saveGState()
         context.textMatrix = .identity
-        if model.wearsMoustache {
-            let height = Layout.moustacheWidth / Moustache.aspect
+        if model.moustache > 0 {
+            let width = (Layout.moustacheWidth * CGFloat(model.moustache)).rounded()
+            let height = width / Moustache.aspect
             let rect = CGRect(x: moustacheX, y: bounds.midY - height / 2,
-                              width: Layout.moustacheWidth, height: height)
+                              width: width, height: height)
             context.addPath(Moustache.path(in: rect, yUp: true))
             context.setFillColor(palette.solid)
             context.fillPath()
