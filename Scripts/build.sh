@@ -33,7 +33,17 @@ vtool -set-build-version macos "$MIN_OS" "$SDK_VERSION" -replace \
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
-if [ -f Resources/AppIcon.icns ]; then
+# An Icon Composer file is the Liquid Glass icon. actool compiles it into the asset
+# catalog macOS 26 draws the glass from, plus a flattened AppIcon.icns that macOS 14
+# and 15 use instead, and naming it in CFBundleIconName is what makes the system pick
+# the catalog over the .icns. Without one, the plain .icns is all there is.
+if [ -d Resources/AppIcon.icon ]; then
+  xcrun actool "$PWD/Resources/AppIcon.icon" --compile "$APP/Contents/Resources" \
+    --app-icon AppIcon --platform macosx --target-device mac \
+    --minimum-deployment-target "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' Resources/Info.plist)" \
+    --output-partial-info-plist "$BIN_DIR/AppIcon-partial.plist" >/dev/null
+  /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist"
+elif [ -f Resources/AppIcon.icns ]; then
   cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
 
