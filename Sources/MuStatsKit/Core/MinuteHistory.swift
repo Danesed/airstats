@@ -124,6 +124,19 @@ public struct MinuteHistory: Sendable, Equatable {
         return notes[kind.rawValue * capacity + slot(of: bucket)]
     }
 
+    /// The mean of `key` in the bucket holding `date`, or nil when that bucket has no
+    /// sample or has already left the tier. One cell and no allocation: reading a
+    /// single moment through `series` would build every bucket to use one.
+    public func average(_ key: SeriesKey, at date: Date) -> Double? {
+        guard let newest = newestBucket else { return nil }
+        let bucket = bucket(of: date)
+        guard bucket <= newest, bucket > newest - capacity else { return nil }
+        let cell = index(of: key, slot: slot(of: bucket))
+        let count = counts[cell]
+        guard count > 0 else { return nil }
+        return Double(sums[cell] / Float(count))
+    }
+
     /// The last `capacity` buckets of one series, oldest first, ending at the newest
     /// bucket. Allocates four arrays; call once per render, not per point.
     public func series(_ key: SeriesKey) -> MinuteSeries {

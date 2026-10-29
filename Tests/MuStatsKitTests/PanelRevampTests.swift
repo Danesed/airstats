@@ -203,3 +203,39 @@ struct MoustacheCalendarTests {
         #expect(last == 1)
     }
 }
+
+@Suite("A minute of the day reads back as the panel would have shown it")
+struct PanelMomentTests {
+    private let formatter = MetricFormatter(settings: GeneralSettings())
+
+    @Test("a sampled minute lists its readings and the process behind the high")
+    func sampledMinute() {
+        var day = MinuteHistory()
+        let when = Date(timeIntervalSince1970: 1_800_000_000)
+        day.advance(to: when)
+        day.record(.cpuTotal, 0.5)
+        day.record(.cpuTotal, 0.7)
+        day.record(.memoryUsed, 0.62)
+        day.record(.memoryPressure, 0.3)
+        day.record(.cpuTemperature, 71)
+        day.note(.cpu, name: "swift-frontend", value: 0.7)
+        let moment = PanelMoment(day: day, at: when, formatter: formatter)
+        #expect(moment.rows.map(\.label) == ["CPU", "Memory", "Temperature"])
+        #expect(moment.rows.first?.value == formatter.percent(0.6))
+        #expect(moment.rows.first?.culprit == "swift-frontend")
+        // Pressure under a half says nothing, so the memory row leaves it out.
+        #expect(moment.rows[1].value == formatter.percent(0.62))
+    }
+
+    @Test("a minute with no samples is empty, not zero")
+    func emptyMinute() {
+        var day = MinuteHistory()
+        let when = Date(timeIntervalSince1970: 1_800_000_000)
+        day.advance(to: when)
+        day.record(.cpuTotal, 0.4)
+        let earlier = when.addingTimeInterval(-600)
+        #expect(PanelMoment(day: day, at: earlier, formatter: formatter).isEmpty)
+        #expect(day.average(.cpuTotal, at: earlier) == nil)
+        #expect(abs((day.average(.cpuTotal, at: when) ?? 0) - 0.4) < 1e-6)
+    }
+}

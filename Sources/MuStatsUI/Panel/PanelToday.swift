@@ -128,9 +128,17 @@ struct PanelTodayCard: View {
     let open: (PanelModule) -> Void
 
     @Environment(\.metricFormatter) private var formatter
+    /// Where the pointer is over the chart, 0 at the oldest minute and 1 at now.
+    /// Kept as a position rather than a date so the minute under a still pointer
+    /// keeps up as the day moves.
+    @State private var cursor: CGFloat?
 
     private static let plotHeight: CGFloat = 52
     private static let pin: CGFloat = 13
+    /// The rows under the chart take the same height whether they list the day's
+    /// events or the minute under the pointer, so moving onto the chart never
+    /// resizes the panel.
+    private static let detailHeight: CGFloat = 110
 
     var body: some View {
         let events = PanelEvents.detect(in: engine.dayHistory)
@@ -148,15 +156,65 @@ struct PanelTodayCard: View {
                                   style: settings.settings.charts.style,
                                   height: Self.plotHeight)
                     .overlay(alignment: .topLeading) { pins(events) }
+                    .overlay { scrubber }
                     .padding(.top, Self.pin / 2)
                 axis
             }
-            ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                eventRow(event, number: index + 1)
+            VStack(alignment: .leading, spacing: Design.Space.xxs) {
+                if let date = cursorDate {
+                    PanelMomentCard(moment: PanelMoment(day: engine.dayHistory, at: date,
+                                                        formatter: formatter))
+                } else {
+                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                        eventRow(event, number: index + 1)
+                    }
+                    Spacer(minLength: 0)
+                    Text("Point at the chart to see any minute of the day.")
+                        .font(Design.Text.caption)
+                        .foregroundStyle(Design.Palette.tertiaryText)
+                }
             }
+            .frame(height: Self.detailHeight, alignment: .top)
         }
         .padding(.horizontal, Design.Space.m)
         .padding(.vertical, Design.Space.s)
+    }
+
+    /// The minute the pointer is on: the middle of its bucket, so the reading is
+    /// that minute's and not the one before it.
+    private var cursorDate: Date? {
+        guard let cursor, let newest = engine.dayHistory.newestBucket else { return nil }
+        let capacity = engine.dayHistory.capacity
+        let position = Int((cursor * CGFloat(capacity - 1)).rounded())
+        return engine.dayHistory.date(ofBucket: newest - (capacity - 1) + position)
+            .addingTimeInterval(engine.dayHistory.bucketDuration / 2)
+    }
+
+    /// A hairline under the pointer, and the hover that moves it.
+    private var scrubber: some View {
+        GeometryReader { proxy in
+            let rect = ChartLayout.plotRect(in: proxy.size)
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onContinuousHover(coordinateSpace: .local) { phase in
+                        switch phase {
+                        case .active(let point) where rect.width > 0:
+                            cursor = min(max((point.x - rect.minX) / rect.width, 0), 1)
+                        default:
+                            cursor = nil
+                        }
+                    }
+                if let cursor {
+                    Rectangle()
+                        .fill(Design.Palette.primaryText.opacity(0.55))
+                        .frame(width: Design.Space.hairline, height: rect.height)
+                        .offset(x: rect.minX + rect.width * cursor, y: rect.minY)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 
     private func pins(_ events: [PanelEvent]) -> some View {
@@ -217,5 +275,100 @@ struct PanelTodayCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens \(event.module.label)")
+    }
+}
+
+/// One minute of the day, read back from the minute history: what the panel would
+/// have said then. Built for the cursor over the day chart, so it reads single cells
+/// and allocates nothing per series.
+struct PanelMoment: Equatable {
+    struct Row: Equatable {
+        var label: String
+        var value: String
+        /// The process behind the minute's high, where one was named.
+        var culprit: String?
+    }
+
+    var date: Date
+    var rows: [Row]
+
+    init(day: MinuteHistory, at date: Date, formatter: MetricFormatter) {
+        self.date = date
+        var rows: [Row] = []
+        func value(_ key: SeriesKey) -> Double? { day.average(key, at: date) }
+        if let cpu = value(.cpuTotal) {
+            rows.append(Row(label: "CPU", value: formatter.percent(cpu),
+                            culprit: day.note(.cpu, at: date)?.name))
+        }
+        if let memory = value(.memoryUsed) {
+            // Pressure only when it says something: half or more.
+            let pressure = value(.memoryPressure).flatMap { $0 >= 0.5 ? $0 : nil }
+            rows.append(Row(label: "Memory",
+                            value: formatter.percent(memory)
+                                + (pressure.map { " · pressure \(formatter.percent($0))" } ?? ""),
+                            culprit: day.note(.memory, at: date)?.name))
+        }
+        if let gpu = value(.gpuUtilization) {
+            rows.append(Row(label: "GPU", value: formatter.percent(gpu)))
+        }
+        if let celsius = value(.cpuTemperature) {
+            rows.append(Row(label: "Temperature", value: formatter.temperature(celsius)))
+        }
+        let down = value(.networkDownload), up = value(.networkUpload)
+        if down != nil || up != nil {
+            rows.append(Row(label: "Network",
+                            value: "↓ \(formatter.networkRate(down ?? 0))  ↑ \(formatter.networkRate(up ?? 0))"))
+        }
+        let watts = value(.systemWatts), charge = value(.batteryPercent)
+        if watts != nil || charge != nil {
+            let plugged = (value(.batteryPlugged) ?? 0) >= 0.5
+            let parts = [watts.map { formatter.watts($0) },
+                         charge.map { formatter.percent($0) + (plugged ? " charging" : "") }]
+            rows.append(Row(label: "Power", value: parts.compactMap { $0 }.joined(separator: " · ")))
+        }
+        self.rows = rows
+    }
+
+    /// No row at all: the Mac was asleep, off, or μStats was not running.
+    var isEmpty: Bool { rows.isEmpty }
+}
+
+/// The minute under the pointer, set in the rows the day's events otherwise use.
+struct PanelMomentCard: View {
+    let moment: PanelMoment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(HistoryAxis.clock(moment.date))
+                .font(Design.Text.caption.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Design.Palette.primaryText)
+                .frame(height: 15)
+            if moment.isEmpty {
+                Text("No readings. The Mac was asleep, or μStats was not running.")
+                    .font(Design.Text.caption)
+                    .foregroundStyle(Design.Palette.secondaryText)
+            }
+            ForEach(moment.rows, id: \.label) { row in
+                HStack(alignment: .firstTextBaseline, spacing: Design.Space.s) {
+                    Text(row.label)
+                        .font(Design.Text.caption)
+                        .foregroundStyle(Design.Palette.secondaryText)
+                    Spacer(minLength: Design.Space.s)
+                    if let culprit = row.culprit {
+                        Text(culprit)
+                            .font(Design.Text.caption)
+                            .foregroundStyle(Design.Palette.tertiaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    Text(row.value)
+                        .font(Design.Text.value)
+                        .foregroundStyle(Design.Palette.primaryText)
+                        .lineLimit(1)
+                }
+                .frame(height: 15)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
