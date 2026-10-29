@@ -172,7 +172,7 @@ final class AppCoordinator {
         desktopWidgetItem.target = self
         desktopWidgetItem.state = settingsStore.settings.desktopWidget.isEnabled ? .on : .off
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit muStats", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit μStats", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.presentMenu(menu)
     }
 

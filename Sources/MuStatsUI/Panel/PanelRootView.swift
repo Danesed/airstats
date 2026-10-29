@@ -57,18 +57,8 @@ public struct PanelRootView: View {
                 }
                 PanelSeparator()
             }
-            if settings.settings.panel.showsToday {
-                Picker("View", selection: tab) {
-                    Text("Now").tag(PanelTab.now)
-                    Text("Today").tag(PanelTab.today)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .controlSize(.small)
-                .frame(width: 160)
-                .frame(maxWidth: .infinity)
-                .padding(.top, Design.Space.m)
-            }
+            PanelHeaderView(tab: tab, showsTabs: settings.settings.panel.showsToday,
+                            isStale: engine.isStale)
             if shownTab == .now {
                 PanelInsightRow(insight: insight, open: open)
                     .padding(.horizontal, Design.Space.s)
@@ -117,8 +107,6 @@ public struct PanelRootView: View {
             // case that it reaches the ceiling below.
             .scrollIndicators(.never)
             .defaultScrollAnchor(.top)
-            PanelSeparator()
-            PanelFooterView(isStale: engine.isStale, activityMonitorTab: openModule?.activityMonitorTab)
         }
         // The list takes whatever height the window has, and the rows sit at its top.
         //
@@ -379,72 +367,69 @@ struct PanelUpdateRow: View {
     }
 }
 
-struct PanelFooterView: View {
+/// The top of the panel: the Now/Today switch in the middle and Settings at the
+/// right. Quit and Activity Monitor live elsewhere (the status item's menu, and
+/// Option-click), so the panel spends its height on readings.
+struct PanelHeaderView: View {
+    @Binding var tab: PanelTab
+    var showsTabs: Bool
     /// The readings stopped arriving: the Mac just woke, or sampling is stuck. Said
-    /// in the footer rather than by greying the numbers, which reads as disabled.
+    /// here rather than by greying the numbers, which reads as disabled.
     var isStale = false
-    /// Where Activity Monitor should open, from the module the user is looking at.
-    var activityMonitorTab: Int?
 
     @Environment(\.panelActions) private var actions
-
-    var body: some View {
-        HStack(spacing: Design.Space.xs) {
-            PanelFooterButton(title: "Settings…", symbol: "gearshape", action: actions.openSettings)
-                .keyboardShortcut(",", modifiers: .command)
-            Spacer(minLength: Design.Space.xs)
-            if isStale {
-                Text("Updating…")
-                    .font(Design.Text.caption)
-                    .foregroundStyle(Design.Palette.tertiaryText)
-                    .lineLimit(1)
-                Spacer(minLength: Design.Space.xs)
-            }
-            PanelFooterButton(title: "Activity Monitor", symbol: "list.bullet.rectangle") {
-                actions.openActivityMonitor(activityMonitorTab)
-            }
-            Spacer(minLength: Design.Space.xs)
-            PanelFooterButton(title: "Quit", symbol: "power", action: actions.quit)
-                .keyboardShortcut("q", modifiers: .command)
-        }
-        .padding(.horizontal, Design.Space.s)
-        .padding(.vertical, Design.Space.xs)
-    }
-}
-
-/// A footer control styled like a macOS menu item rather than a hyperlink: the whole
-/// row highlights on hover, and the hit target is the highlight.
-struct PanelFooterButton: View {
-    let title: String
-    let symbol: String
-    let action: @MainActor () -> Void
-
     @State private var isHovering = false
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: Design.Space.s) {
-                Image(systemName: symbol)
-                    .font(Design.Text.caption)
-                    .foregroundStyle(Design.Palette.secondaryText)
-                Text(title)
-                    .font(Design.Text.label)
-                    .foregroundStyle(Design.Palette.primaryText)
+        ZStack {
+            if showsTabs {
+                Picker("View", selection: $tab) {
+                    Text("Now").tag(PanelTab.now)
+                    Text("Today").tag(PanelTab.today)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 160)
             }
-            .padding(.horizontal, Design.Space.m)
-            .padding(.vertical, Design.Space.xs)
-            .background(
-                RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
-                    .fill(isHovering ? Design.Palette.track : .clear)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(Design.Motion.respectingAccessibility(Design.Motion.hover)) {
-                isHovering = hovering
+            HStack(spacing: Design.Space.xs) {
+                if isStale {
+                    Text("Updating…")
+                        .font(Design.Text.caption)
+                        .foregroundStyle(Design.Palette.tertiaryText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Button(action: actions.openSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(isHovering ? Design.Palette.primaryText : Design.Palette.secondaryText)
+                        .frame(width: 26, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: Design.Radius.control, style: .continuous)
+                                .fill(isHovering ? Design.Palette.track : .clear)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(",", modifiers: .command)
+                .help("Settings")
+                .accessibilityLabel("Settings")
+                .onHover { hovering in
+                    withAnimation(Design.Motion.respectingAccessibility(Design.Motion.hover)) {
+                        isHovering = hovering
+                    }
+                }
             }
         }
-        .accessibilityLabel(title)
+        // ⌘Q still quits from the open panel, with nothing on screen for it.
+        .background {
+            Button("Quit", action: actions.quit)
+                .keyboardShortcut("q", modifiers: .command)
+                .hidden()
+        }
+        .padding(.horizontal, Design.Space.m)
+        .padding(.top, Design.Space.m)
     }
 }
+
