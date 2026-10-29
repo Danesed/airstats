@@ -275,9 +275,13 @@ struct PanelModuleView: View {
                     .font(Design.Text.caption.weight(.semibold))
                     .foregroundStyle(Design.Palette.secondaryText)
             }
-            Text(value)
-                .font(summary.emphasis == .state ? Design.Text.value
-                      : isExpanded ? Design.Text.openHeadline : Design.Text.headline)
+            Group {
+                if summary.emphasis == .state {
+                    Text(value).font(Design.Text.value)
+                } else {
+                    UnitText.text(value, size: isExpanded ? 20 : 13, weight: .semibold)
+                }
+            }
                 .foregroundStyle(headlineColor)
                 .lineLimit(1)
                 .contentTransition(.numericText())
