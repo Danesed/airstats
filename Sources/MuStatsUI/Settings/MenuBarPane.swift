@@ -22,10 +22,19 @@ struct MenuBarPane: View {
                 Toggle("Calm: one μ that fills with the Mac's load",
                        isOn: settings.binding(\.menuBar.isCalm))
                     .disabled(!isVisible)
+                Toggle("Show the readings when the pointer rests on the notch",
+                       isOn: settings.binding(\.menuBar.showsNotchReadings))
+                    .disabled(!isVisible)
             } footer: {
-                if settings.settings.menuBar.isCalm {
-                    SettingsFootnote("The readouts below are kept for when calm is off. The μ turns "
-                                     + "orange or red only when something needs attention.")
+                VStack(alignment: .leading, spacing: Design.Space.xs) {
+                    if settings.settings.menuBar.isCalm {
+                        SettingsFootnote("The readouts below are kept for when calm is off. The μ turns "
+                                         + "orange or red only when something needs attention.")
+                    }
+                    if settings.settings.menuBar.showsNotchReadings {
+                        SettingsFootnote("On a MacBook with a notch. Useful when a crowded menu bar hides "
+                                         + "the readouts; click the open notch for the full panel.")
+                    }
                 }
             }
 

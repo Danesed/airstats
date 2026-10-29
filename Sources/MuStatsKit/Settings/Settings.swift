@@ -287,6 +287,8 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     /// One μ in place of every readout, filling with the Mac's overall load and taking
     /// colour only when something needs attention.
     public var isCalm: Bool
+    /// On a MacBook with a notch, resting the pointer on the notch opens the readings.
+    public var showsNotchReadings: Bool
 
     /// Numbers are always set in a fixed-width face. Previously a toggle; a column of
     /// proportional digits shimmers as it changes, which is the single most visible
@@ -308,12 +310,14 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
                 usesCombinedItem: Bool = true,
                 isVisible: Bool = true,
                 showsBatteryPercentage: Bool = true,
-                isCalm: Bool = false) {
+                isCalm: Bool = false,
+                showsNotchReadings: Bool = false) {
         self.items = items
         self.usesCombinedItem = usesCombinedItem
         self.isVisible = isVisible
         self.showsBatteryPercentage = showsBatteryPercentage
         self.isCalm = isCalm
+        self.showsNotchReadings = showsNotchReadings
     }
 
     /// CPU, memory and disk as captioned bars, the CPU temperature as a number, and
@@ -338,7 +342,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
     public var enabledItems: [MenuBarItemConfig] { items.filter(\.isEnabled) }
 
     private enum CodingKeys: String, CodingKey {
-        case items, usesCombinedItem, isVisible, showsBatteryPercentage, isCalm
+        case items, usesCombinedItem, isVisible, showsBatteryPercentage, isCalm, showsNotchReadings
     }
 
     /// Files written before the packing settings were removed still load: the keys
@@ -353,6 +357,7 @@ public struct MenuBarSettings: Sendable, Codable, Equatable {
         isVisible = c.value(.isVisible, or: true)
         showsBatteryPercentage = c.value(.showsBatteryPercentage, or: true)
         isCalm = c.value(.isCalm, or: false)
+        showsNotchReadings = c.value(.showsNotchReadings, or: false)
     }
 }
 
