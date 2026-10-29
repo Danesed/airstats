@@ -312,6 +312,9 @@ extension PanelModuleView {
                     PanelBarRow(label: wifi.ssid ?? "Signal", value: signalValue(wifi),
                                 fraction: quality, tint: tint)
                 }
+                if settings.settings.panel.developerToolsShown {
+                    PanelListeningPorts()
+                }
                 history()
             }
         }
@@ -408,6 +411,8 @@ extension PanelModuleView {
                 culprits("Reading and writing the most", by: diskTotal) {
                     formatter.diskRate(diskTotal($0))
                 }
+                PanelStorageInsights(engine: engine,
+                                     directory: settings.settingsFileURL.deletingLastPathComponent())
                 PanelDetailGrid(entries: [
                     PanelDetailEntry("Read", formatter.diskRate(disk.readBytesPerSecond)),
                     PanelDetailEntry("Write", formatter.diskRate(disk.writeBytesPerSecond)),

@@ -420,6 +420,12 @@ public struct PanelSettings: Sendable, Codable, Equatable {
     public var moduleOrder: [PanelModule]
     /// The "Today" card: the day's CPU with its notable stretches pinned on it.
     public var showsToday: Bool
+    /// Listening ports and Docker in the network module. Nil until the user decides,
+    /// which reads as on for a Mac with developer tools installed and off otherwise.
+    public var showsDeveloperTools: Bool?
+
+    /// Whether the developer readings are on, deciding for the user until they have.
+    public var developerToolsShown: Bool { showsDeveloperTools ?? DeveloperEnvironment.isPresent }
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -434,13 +440,15 @@ public struct PanelSettings: Sendable, Codable, Equatable {
                 defaultHistoryRange: HistoryRange = .hour,
                 showsAlertColors: Bool = true,
                 moduleOrder: [PanelModule] = [],
-                showsToday: Bool = true) {
+                showsToday: Bool = true,
+                showsDeveloperTools: Bool? = nil) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
         self.defaultHistoryRange = defaultHistoryRange
         self.showsAlertColors = showsAlertColors
         self.moduleOrder = moduleOrder
         self.showsToday = showsToday
+        self.showsDeveloperTools = showsDeveloperTools
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -502,6 +510,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors, moduleOrder, showsToday
+        case showsDeveloperTools
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -515,6 +524,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         showsAlertColors = c.value(.showsAlertColors, or: true)
         moduleOrder = c.value(.moduleOrder, or: [])
         showsToday = c.value(.showsToday, or: true)
+        showsDeveloperTools = try? c.decodeIfPresent(Bool.self, forKey: .showsDeveloperTools)
     }
 }
 

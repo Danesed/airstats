@@ -108,6 +108,17 @@ struct AppearancePane: View {
                 SettingsFootnote("Choose whether history charts are shown when expanding panel modules, and which time range (5 min, 1h, 24h, 30d) opens by default.")
             }
 
+            Section {
+                Toggle("Show developer tools in the panel", isOn: Binding(
+                    get: { settings.settings.panel.developerToolsShown },
+                    set: { value in settings.update { $0.panel.showsDeveloperTools = value } }))
+            } header: {
+                Text("Developer")
+            } footer: {
+                SettingsFootnote("Ports your apps are listening on and the containers Docker is running, in the network module. "
+                                 + "On by default when Xcode, Homebrew or Docker is installed. Read only while the module is open.")
+            }
+
         }
         .settingsFormStyle()
     }

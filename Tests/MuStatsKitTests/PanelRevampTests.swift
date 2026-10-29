@@ -457,3 +457,34 @@ struct SmartAlertTests {
         #expect(third.alert == nil)
     }
 }
+
+@Suite("Where the space went")
+struct StorageScanTests {
+    private func sample(_ hoursAgo: Double, _ gb: Double, now: Date) -> StorageFolder.Sample {
+        StorageFolder.Sample(date: now.addingTimeInterval(-hoursAgo * 3_600), bytes: UInt64(gb * 1e9))
+    }
+
+    @Test("the change is measured against the reading closest to a day before")
+    func changeSinceYesterday() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let folder = StorageFolder(id: "d", label: "DerivedData", path: "/tmp", isCleanable: true,
+                                   samples: [sample(72, 10, now: now), sample(25, 20, now: now),
+                                             sample(13, 30, now: now), sample(0, 38, now: now)])
+        #expect(folder.change?.bytes == 18_000_000_000)
+    }
+
+    @Test("readings fold to one per half day and a week at most")
+    func fold() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var samples = [sample(200, 1, now: now), sample(30, 2, now: now), sample(3, 3, now: now)]
+        samples = StorageScan.fold(samples, sample(0, 4, now: now))
+        // The week-old one is gone, the one from three hours ago replaced.
+        #expect(samples.map(\.bytes) == [2_000_000_000, 4_000_000_000])
+    }
+
+    @Test("listening ports read without failing, and stay out of the dynamic range")
+    func ports() {
+        let ports = ListeningPorts.current()
+        #expect(ports.allSatisfy { $0.port < ListeningPorts.dynamicRange })
+    }
+}
