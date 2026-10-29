@@ -282,9 +282,14 @@ private struct PanelPreviewHost: View {
         // which draws nothing offscreen. The sheen over it is the one the window used
         // before Liquid Glass, so the glass edge at least renders here.
         PanelRootView(engine: PreviewEngine.make(request), settings: PreviewEngine.store(request))
-            // `MUSTATS_RENDER_TAB=today` renders the Today tab.
-            .environment(\.panelInitialTab,
-                         ProcessInfo.processInfo.environment["MUSTATS_RENDER_TAB"] == "today" ? .today : .now)
+            // `MUSTATS_RENDER_TAB=today` renders the Today tab, `chip` the live chip.
+            .environment(\.panelInitialTab, {
+                switch ProcessInfo.processInfo.environment["MUSTATS_RENDER_TAB"] {
+                case "today": return .today
+                case "chip": return .chip
+                default: return .now
+                }
+            }())
             .floatingSurface(in: RoundedRectangle(cornerRadius: Design.Radius.panel,
                                                   style: .continuous))
             .clipShape(RoundedRectangle(cornerRadius: Design.Radius.panel, style: .continuous))
@@ -335,6 +340,9 @@ enum PreviewEngine {
             .appendingPathComponent("MuStatsRender-\(UUID().uuidString)")
         let store = SettingsStore(directory: directory)
         store.update { $0 = request.settings }
+        if ProcessInfo.processInfo.environment["MUSTATS_RENDER_TAB"] == "chip" {
+            store.update { $0.panel.showsLiveChip = true }
+        }
         storeCache[key] = store
         return store
     }

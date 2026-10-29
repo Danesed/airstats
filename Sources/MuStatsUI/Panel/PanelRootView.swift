@@ -57,8 +57,7 @@ public struct PanelRootView: View {
                 }
                 PanelSeparator()
             }
-            PanelHeaderView(tab: tab, showsTabs: settings.settings.panel.showsToday,
-                            isStale: engine.isStale)
+            PanelHeaderView(tab: tab, tabs: availableTabs, isStale: engine.isStale)
             if shownTab == .now {
                 PanelInsightRow(insight: insight, open: open)
                     .padding(.horizontal, Design.Space.s)
@@ -66,7 +65,11 @@ public struct PanelRootView: View {
             }
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
-                    if shownTab == .today {
+                    if shownTab == .chip {
+                        PanelLiveChip(engine: engine)
+                            .panelCard()
+                            .padding(.top, Design.Space.s)
+                    } else if shownTab == .today {
                         PanelTodayCard(engine: engine, settings: settings) { module in
                             pickedTab = .now
                             open(module)
@@ -137,9 +140,18 @@ public struct PanelRootView: View {
         Binding(get: { pickedTab ?? initialTab }, set: { pickedTab = $0 })
     }
 
-    /// Today with the switch off is Now, whatever was picked before it went off.
+    /// Now, then the extras the user has switched on.
+    private var availableTabs: [PanelTab] {
+        var tabs: [PanelTab] = [.now]
+        if settings.settings.panel.showsToday { tabs.append(.today) }
+        if settings.settings.panel.showsLiveChip { tabs.append(.chip) }
+        return tabs
+    }
+
+    /// A tab switched off is Now, whatever was picked before it went off.
     private var shownTab: PanelTab {
-        settings.settings.panel.showsToday ? (pickedTab ?? initialTab) : .now
+        let wanted = pickedTab ?? initialTab
+        return availableTabs.contains(wanted) ? wanted : .now
     }
 
     private func moduleView(_ module: PanelModule, captionColumnWidth: CGFloat,
@@ -207,7 +219,17 @@ public struct PanelRootView: View {
 
 }
 
-enum PanelTab: Hashable { case now, today }
+enum PanelTab: Hashable {
+    case now, today, chip
+
+    var title: String {
+        switch self {
+        case .now: return "Now"
+        case .today: return "Today"
+        case .chip: return "Chip"
+        }
+    }
+}
 
 private struct PanelInitialTabKey: EnvironmentKey {
     static let defaultValue = PanelTab.now
@@ -372,7 +394,7 @@ struct PanelUpdateRow: View {
 /// Option-click), so the panel spends its height on readings.
 struct PanelHeaderView: View {
     @Binding var tab: PanelTab
-    var showsTabs: Bool
+    var tabs: [PanelTab]
     /// The readings stopped arriving: the Mac just woke, or sampling is stuck. Said
     /// here rather than by greying the numbers, which reads as disabled.
     var isStale = false
@@ -382,15 +404,16 @@ struct PanelHeaderView: View {
 
     var body: some View {
         ZStack {
-            if showsTabs {
+            if tabs.count > 1 {
                 Picker("View", selection: $tab) {
-                    Text("Now").tag(PanelTab.now)
-                    Text("Today").tag(PanelTab.today)
+                    ForEach(tabs, id: \.self) { tab in
+                        Text(tab.title).tag(tab)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .controlSize(.small)
-                .frame(width: 160)
+                .frame(width: CGFloat(tabs.count) * 80)
             }
             HStack(spacing: Design.Space.xs) {
                 if isStale {

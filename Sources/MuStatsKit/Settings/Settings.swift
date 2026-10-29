@@ -437,6 +437,8 @@ public struct PanelSettings: Sendable, Codable, Equatable {
 
     /// Whether the developer readings are on, deciding for the user until they have.
     public var developerToolsShown: Bool { showsDeveloperTools ?? DeveloperEnvironment.isPresent }
+    /// The live chip tab: the processor drawn and lit by the readings. An extra.
+    public var showsLiveChip: Bool
 
     /// Fixed layout, previously the `width` setting. 380pt gives a detail grid three
     /// columns and a process name room beside its icon, and still leaves the panel
@@ -452,7 +454,8 @@ public struct PanelSettings: Sendable, Codable, Equatable {
                 showsAlertColors: Bool = true,
                 moduleOrder: [PanelModule] = [],
                 showsToday: Bool = true,
-                showsDeveloperTools: Bool? = nil) {
+                showsDeveloperTools: Bool? = nil,
+                showsLiveChip: Bool = false) {
         self.collapsedModules = Self.accordion(collapsedModules)
         self.showsHistoryChart = showsHistoryChart
         self.defaultHistoryRange = defaultHistoryRange
@@ -460,6 +463,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         self.moduleOrder = moduleOrder
         self.showsToday = showsToday
         self.showsDeveloperTools = showsDeveloperTools
+        self.showsLiveChip = showsLiveChip
     }
 
     /// The collapsed set after a click on `module`'s header.
@@ -521,7 +525,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case collapsedModules, showsHistoryChart, defaultHistoryRange, showsAlertColors, moduleOrder, showsToday
-        case showsDeveloperTools
+        case showsDeveloperTools, showsLiveChip
     }
 
     /// Decoded leniently, and settings files written before the panel pane was removed
@@ -536,6 +540,7 @@ public struct PanelSettings: Sendable, Codable, Equatable {
         moduleOrder = c.value(.moduleOrder, or: [])
         showsToday = c.value(.showsToday, or: true)
         showsDeveloperTools = try? c.decodeIfPresent(Bool.self, forKey: .showsDeveloperTools)
+        showsLiveChip = c.value(.showsLiveChip, or: false)
     }
 }
 

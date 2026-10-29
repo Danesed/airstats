@@ -109,6 +109,16 @@ struct AppearancePane: View {
             }
 
             Section {
+                Toggle("Show the live chip in the panel",
+                       isOn: settings.binding(\.panel.showsLiveChip))
+            } header: {
+                Text("Extras")
+            } footer: {
+                SettingsFootnote("A third tab with a drawing of the chip whose cores light up with their real load. "
+                                 + "It reads nothing new and is drawn only while its tab is open.")
+            }
+
+            Section {
                 Toggle("Show developer tools in the panel", isOn: Binding(
                     get: { settings.settings.panel.developerToolsShown },
                     set: { value in settings.update { $0.panel.showsDeveloperTools = value } }))
