@@ -60,6 +60,7 @@ public final class MenuBarContentView: NSView {
         static let symbolSize: CGFloat = 13
         /// Never let the item shrink to a target too small to click.
         static let minimumWidth: CGFloat = 24
+        static let moustacheWidth: CGFloat = 16
 
         /// The battery indicator, measured off the images Control Center itself draws
         /// the menu bar battery from (`battery-outline`, `battery-cap`, `battery-bolt`,
@@ -233,6 +234,10 @@ public final class MenuBarContentView: NSView {
         guard !model.items.isEmpty else { cachedWidth = 0; return }
 
         var content: CGFloat = 0
+        if model.wearsMoustache {
+            moustacheX = 0
+            content = Layout.moustacheWidth + CGFloat(model.spacing)
+        }
         for (index, item) in model.items.enumerated() {
             // Bars pack. Two bars a whole readout apart read as two readouts, and the
             // point of the shape is that three of them read as one group, so a bar that
@@ -255,7 +260,11 @@ public final class MenuBarContentView: NSView {
         cachedWidth = ceil(content + Layout.horizontalInset * 2)
         let origin = ((cachedWidth - content) / 2).rounded()
         for index in placements.indices { placements[index].x += origin }
+        moustacheX += origin
     }
+
+    /// Where the moustache starts, when the model wears one.
+    private var moustacheX: CGFloat = 0
 
     private struct Placement {
         let item: MenuBarItemRender
@@ -509,6 +518,14 @@ public final class MenuBarContentView: NSView {
 
         context.saveGState()
         context.textMatrix = .identity
+        if model.wearsMoustache {
+            let height = Layout.moustacheWidth / Moustache.aspect
+            let rect = CGRect(x: moustacheX, y: bounds.midY - height / 2,
+                              width: Layout.moustacheWidth, height: height)
+            context.addPath(Moustache.path(in: rect, yUp: true))
+            context.setFillColor(palette.solid)
+            context.fillPath()
+        }
         for placement in placements {
             draw(placement, palette: palette, scale: scale, context: context)
         }

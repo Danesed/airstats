@@ -154,6 +154,8 @@ public struct MenuBarRenderModel: Equatable, Sendable {
     public var usesMonospacedDigits: Bool
     public var usesFixedWidth: Bool
     public var isStale: Bool
+    /// Set on World Moustache Day: the first readout wears one. See `Moustache`.
+    public var wearsMoustache = false
 
     public var accessibilityDescription: String {
         items.map(\.accessibilityLabel).joined(separator: ", ")

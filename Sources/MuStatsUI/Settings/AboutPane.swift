@@ -12,6 +12,7 @@ struct AboutPane: View {
     @State private var transferResult: String?
     @State private var transferFailed = false
     @State private var isConfirmingFullReset = false
+    @State private var logoTaps = 0
 
     /// Live identity when the app is running; the render harness has no engine, so
     /// it shows the same fixture machine every other rendered surface shows.
@@ -23,12 +24,28 @@ struct AboutPane: View {
         MetricFormatter(settings: settings.settings.general)
     }
 
+    /// Seven clicks on the logo, and it grows one. Seven more and it is shaved.
+    private var wearsMoustache: Bool { (logoTaps / 7) % 2 == 1 }
+
+    private var moustache: some View {
+        MoustacheShape()
+            .frame(width: 34, height: 34 / Moustache.aspect)
+            .offset(y: 4)
+            .scaleEffect(wearsMoustache ? 1 : 0.2, anchor: .center)
+            .opacity(wearsMoustache ? 1 : 0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.5), value: wearsMoustache)
+            .accessibilityHidden(true)
+    }
+
     var body: some View {
         Form {
             Section {
                 HStack(spacing: Design.Space.xl) {
                     LogoMark(size: 52)
+                        .overlay(alignment: .bottom) { moustache }
                         .foregroundStyle(Design.Palette.primaryText)
+                        .contentShape(Rectangle())
+                        .onTapGesture { logoTaps += 1 }
                     VStack(alignment: .leading, spacing: Design.Space.xxs) {
                         Text("μStats").font(.title2.weight(.medium))
                         Text(versionText).foregroundStyle(Design.Palette.secondaryText)

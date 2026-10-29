@@ -248,10 +248,11 @@ public final class StatusItemController {
         // takes effect on the same pass that redraws the numbers under it.
         syncLayout()
         guard !hosted.isEmpty else { return }
-        let model = MenuBarRenderModel(snapshot: steadied(engine.snapshot),
+        var model = MenuBarRenderModel(snapshot: steadied(engine.snapshot),
                                        history: engine.history,
                                        settings: settings.settings,
                                        isStale: engine.isStale)
+        model.wearsMoustache = Moustache.isDay()
         for entry in hosted {
             let slice = StatusItemController.slice(model, readout: entry.readout)
             // Read out whether or not the drawing changed: a bar's number is spoken but
@@ -310,6 +311,8 @@ public final class StatusItemController {
         guard let readout else { return model }
         var slice = model
         slice.items = model.items.filter { $0.id == readout }
+        // One moustache for the whole bar, on the leading readout.
+        slice.wearsMoustache = model.wearsMoustache && model.items.first?.id == readout
         return slice
     }
 
