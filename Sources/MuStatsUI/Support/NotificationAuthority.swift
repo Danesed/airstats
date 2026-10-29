@@ -38,8 +38,21 @@ public final class NotificationAuthority {
     /// delegate is shared: two features post from here, and a single slot would let
     /// whichever registered second silently swallow the other one's clicks.
     private var openHandlers: [String: () -> Void] = [:]
+    /// What to do when a notification's own button is pressed, with the button and
+    /// what the notification was posted with. One slot: only the alerts that name a
+    /// process carry buttons.
+    private var actionHandler: ((String, [AnyHashable: Any]) -> Void)?
+
+    /// The buttons a notification can carry, by the category it is posted under.
+    static let quitAction = "quit"
+    static let ignoreAction = "ignore"
 
     public init() {}
+
+    /// Registers what a press on a notification's own button does.
+    public func onAction(_ handler: ((String, [AnyHashable: Any]) -> Void)?) {
+        actionHandler = handler
+    }
 
     /// Registers what a click on `identifier` should do.
     ///
@@ -99,22 +112,40 @@ public final class NotificationAuthority {
                 relay.onOpen = { [weak self] identifier in
                     MainActor.assumeIsolated { self?.openHandlers[identifier]?() }
                 }
+                relay.onAction = { [weak self] action, info in
+                    MainActor.assumeIsolated { self?.actionHandler?(action, info) }
+                }
                 center.delegate = relay
                 self.relay = relay
+                center.setNotificationCategories(Self.categories)
             }
             WindowLog.log("notification authorisation \(granted ? "granted" : "refused") for \(why)")
         }
         return false
     }
 
+    /// Quit and Ignore for a process that ran away; Quit alone for one that is only
+    /// heavy. The titles are the system's to lay out; these are the words on them.
+    private static var categories: Set<UNNotificationCategory> {
+        let quit = UNNotificationAction(identifier: quitAction, title: "Quit", options: [.destructive])
+        let ignore = UNNotificationAction(identifier: ignoreAction, title: "Ignore", options: [])
+        return [
+            UNNotificationCategory(identifier: "runaway", actions: [quit, ignore], intentIdentifiers: []),
+            UNNotificationCategory(identifier: "quittable", actions: [quit], intentIdentifiers: []),
+        ]
+    }
+
     /// Hands a notification to the system. No-op unless the grant is in hand, so a
     /// caller never has to check twice.
-    public func post(identifier: String, title: String, body: String) {
+    public func post(identifier: String, title: String, body: String,
+                     category: String? = nil, userInfo: [AnyHashable: Any] = [:]) {
         guard state == .granted else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        if let category { content.categoryIdentifier = category }
+        content.userInfo = userInfo
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request) { error in
             if let error {
@@ -147,6 +178,7 @@ public final class NotificationAuthority {
 private final class NotificationRelay: NSObject, UNUserNotificationCenterDelegate {
 
     var onOpen: ((String) -> Void)?
+    var onAction: ((String, [AnyHashable: Any]) -> Void)?
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
@@ -160,8 +192,13 @@ private final class NotificationRelay: NSObject, UNUserNotificationCenterDelegat
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+        switch response.actionIdentifier {
+        case UNNotificationDefaultActionIdentifier:
             onOpen?(response.notification.request.identifier)
+        case UNNotificationDismissActionIdentifier:
+            break
+        default:
+            onAction?(response.actionIdentifier, response.notification.request.content.userInfo)
         }
         completionHandler()
     }

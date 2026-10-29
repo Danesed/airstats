@@ -149,6 +149,11 @@ public final class SamplingCore: @unchecked Sendable {
     static let cpuWitnessThreshold = 0.10
     /// Memory pressure above which the minute gets the same look.
     static let memoryWitnessThreshold = 0.6
+    /// Most of one core, as the share of the machine a single busy process makes.
+    static let oneCoreShare = 0.8
+    /// Set from outside to read the process list on the next two ticks whatever the
+    /// load: unplugging asks, so the alert can say what is drawing the battery.
+    private var witnessRequested = false
     private var activity: SamplingActivity = .menuBar
     private var enabledSources: Set<CollectorID> = Set(CollectorID.allCases)
     private var publicIPLookupEnabled = false
@@ -503,9 +508,20 @@ public final class SamplingCore: @unchecked Sendable {
             witnessFollowUpDue = false
             return true
         }
+        if witnessRequested {
+            witnessRequested = false
+            processSlot.invalidateBaseline()
+            witnessFollowUpDue = true
+            return true
+        }
         let busy = cpuSlot.state.value?.total.busy ?? 0
         let pressure = memorySlot.state.value?.pressureFraction ?? 0
-        guard busy >= Self.cpuWitnessThreshold || pressure >= Self.memoryWitnessThreshold else {
+        // One core flat out is a tenth of a twelve-core Mac but less than that of a
+        // larger one, and a single runaway core is exactly what the runaway alert
+        // looks for, so the bar is the lower of the two.
+        let cores = Double(max(cpuSlot.state.value?.perCore.count ?? 1, 1))
+        let cpuBar = min(Self.cpuWitnessThreshold, Self.oneCoreShare / cores)
+        guard busy >= cpuBar || pressure >= Self.memoryWitnessThreshold else {
             return false
         }
         let minute = Int(Date().timeIntervalSince1970 / 60)
@@ -516,6 +532,11 @@ public final class SamplingCore: @unchecked Sendable {
         processSlot.invalidateBaseline()
         witnessFollowUpDue = true
         return true
+    }
+
+    /// Reads the process list on the next two ticks, whatever the load.
+    func requestProcessWitness() {
+        queue.async { [weak self] in self?.witnessRequested = true }
     }
 
     private func thermalMultiplier(for identifier: CollectorID) -> Double {

@@ -240,3 +240,20 @@ struct HistoryCapacityTests {
         #expect(decoded.panel.showsAlertColors == false)
     }
 }
+
+@Suite("Smart alerts pull in only what they read")
+struct SmartAlertSourceTests {
+    @Test("the process list is on only for alerts that name a process")
+    func processesFollowAlerts() {
+        var settings = Settings()
+        settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage)]
+        settings.notifications.isEnabled = true
+        #expect(settings.requiredSources(panelVisible: false, desktopWidgetVisible: false).contains(.processes))
+        settings.notifications.notifiesOnRunaway = false
+        settings.notifications.notifiesOnHeavyUnplug = false
+        #expect(!settings.requiredSources(panelVisible: false, desktopWidgetVisible: false).contains(.processes))
+        settings.notifications.isEnabled = false
+        settings.notifications.notifiesOnRunaway = true
+        #expect(!settings.requiredSources(panelVisible: false, desktopWidgetVisible: false).contains(.processes))
+    }
+}

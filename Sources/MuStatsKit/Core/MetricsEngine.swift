@@ -152,6 +152,12 @@ public final class MetricsEngine {
     }
 
     /// Triggers an immediate network latency probe.
+    /// Reads the process list on the next two samples even with the panel closed, for
+    /// an alert that has to name a process.
+    public func requestProcessWitness() {
+        core?.requestProcessWitness()
+    }
+
     public func triggerLatencyProbe() {
         core?.triggerLatencyProbe()
     }

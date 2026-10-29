@@ -863,13 +863,27 @@ public struct NotificationSettings: Sendable, Codable, Equatable {
     /// Alert on every change of the primary link: to no connectivity and back to
     /// one. `connectionType` is free in the snapshot, so the watch costs a compare.
     public var notifiesOnConnectivityChange: Bool
+    /// A process keeping a whole core busy for ten minutes while nobody is at the Mac.
+    public var notifiesOnRunaway: Bool
+    /// A reading well outside what this Mac does at this hour, learnt from its month.
+    public var notifiesOnUnusual: Bool
+    /// On unplugging, a word when something is drawing enough to cut the battery short.
+    public var notifiesOnHeavyUnplug: Bool
+    /// Processes the user asked not to hear about again, by name.
+    public var ignoredRunaways: [String]
 
     public init(isEnabled: Bool = false, rules: [ThresholdRule] = NotificationSettings.defaultRules,
-                notifiesOnPublicIPChange: Bool = false, notifiesOnConnectivityChange: Bool = false) {
+                notifiesOnPublicIPChange: Bool = false, notifiesOnConnectivityChange: Bool = false,
+                notifiesOnRunaway: Bool = true, notifiesOnUnusual: Bool = true,
+                notifiesOnHeavyUnplug: Bool = true, ignoredRunaways: [String] = []) {
         self.isEnabled = isEnabled
         self.rules = rules
         self.notifiesOnPublicIPChange = notifiesOnPublicIPChange
         self.notifiesOnConnectivityChange = notifiesOnConnectivityChange
+        self.notifiesOnRunaway = notifiesOnRunaway
+        self.notifiesOnUnusual = notifiesOnUnusual
+        self.notifiesOnHeavyUnplug = notifiesOnHeavyUnplug
+        self.ignoredRunaways = ignoredRunaways
     }
 
     public static var defaultRules: [ThresholdRule] {
@@ -878,6 +892,7 @@ public struct NotificationSettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case isEnabled, rules, notifiesOnPublicIPChange, notifiesOnConnectivityChange
+        case notifiesOnRunaway, notifiesOnUnusual, notifiesOnHeavyUnplug, ignoredRunaways
     }
 
     public init(from decoder: Decoder) throws {
@@ -885,6 +900,10 @@ public struct NotificationSettings: Sendable, Codable, Equatable {
         isEnabled = c.value(.isEnabled, or: false)
         notifiesOnPublicIPChange = c.value(.notifiesOnPublicIPChange, or: false)
         notifiesOnConnectivityChange = c.value(.notifiesOnConnectivityChange, or: false)
+        notifiesOnRunaway = c.value(.notifiesOnRunaway, or: true)
+        notifiesOnUnusual = c.value(.notifiesOnUnusual, or: true)
+        notifiesOnHeavyUnplug = c.value(.notifiesOnHeavyUnplug, or: true)
+        ignoredRunaways = c.value(.ignoredRunaways, or: [String]())
         var decoded = c.value(.rules, or: NotificationSettings.defaultRules)
         // Add rules for any metric introduced since the file was written.
         let present = Set(decoded.map(\.metric))
@@ -1176,6 +1195,16 @@ public struct Settings: Sendable, Codable, Equatable {
             for rule in notifications.enabledRules { sources.insert(rule.metric.requiredSource) }
             if notifications.notifiesOnPublicIPChange || notifications.notifiesOnConnectivityChange {
                 sources.insert(.network)
+            }
+            if notifications.notifiesOnRunaway || notifications.notifiesOnUnusual {
+                sources.formUnion([.cpu, .memory, .thermal])
+            }
+            if notifications.notifiesOnHeavyUnplug { sources.insert(.power) }
+            // The two alerts that name a process need the list. With the panel closed
+            // it is read only in a busy minute, twice, or on unplugging: never on an
+            // idle Mac, and never while these alerts are off.
+            if notifications.notifiesOnRunaway || notifications.notifiesOnHeavyUnplug {
+                sources.insert(.processes)
             }
         }
         // System info is cheap, static, and needed for the about/uptime readouts.

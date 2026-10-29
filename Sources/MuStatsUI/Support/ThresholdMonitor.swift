@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import UserNotifications
 import MuStatsKit
 
@@ -22,6 +23,9 @@ public final class ThresholdMonitor {
     /// Same seeding rule as the IP: the link state read on the first sample after
     /// launch is the baseline, not an event.
     private var lastSeenConnectivity: Bool?
+    private var runaway = RunawayWatch()
+    private var unusual = UnusualWatch()
+    private var unplug = UnplugWatch()
 
     /// True while the observation loop and any pending authorisation request are
     /// installed.
@@ -47,6 +51,7 @@ public final class ThresholdMonitor {
 
     public func start() {
         guard observationTask == nil else { return }
+        authority.onAction { [weak self] action, info in self?.handle(action, info) }
         // Observation-driven like the status item rather than a timer of its own: the
         // rules can only ever change answer when a new snapshot or a new setting lands.
         // The tracking closure below is rebuilt when the feature toggles so a disabled
@@ -139,9 +144,75 @@ public final class ThresholdMonitor {
             }
             lastSeenConnectivity = online
         }
+
+        evaluateSmart(notifications)
+    }
+
+    /// The alerts worked out from the Mac rather than from a rule: a runaway, the
+    /// unusual, a heavy app at unplugging. Each watch keeps its own state and its own
+    /// cooldown, and none of them reads anything the engine does not already hold.
+    private func evaluateSmart(_ notifications: NotificationSettings) {
+        let snapshot = engine.snapshot
+        let now = Date()
+        let formatter = MetricFormatter(settings: settings.settings.general)
+        // Only a list read this tick: a stale one would keep a streak alive that ended.
+        let fresh = snapshot.processesSampled ? snapshot.processes.value?.processes : nil
+        let own = ProcessInfo.processInfo.processIdentifier
+
+        if notifications.notifiesOnRunaway, let fresh,
+           let alert = runaway.update(processes: fresh, ownPID: own, idle: UserIdle.seconds(),
+                                      ignored: Set(notifications.ignoredRunaways), now: now) {
+            deliver(alert)
+        }
+        if notifications.notifiesOnUnusual {
+            for alert in unusual.update(day: engine.dayHistory, month: engine.monthHistory,
+                                        formatter: formatter, now: now) {
+                deliver(alert)
+            }
+        }
+        if notifications.notifiesOnHeavyUnplug {
+            let outcome = unplug.update(power: snapshot.power.value, processes: fresh, ownPID: own,
+                                        formatter: formatter, now: now)
+            if outcome.requestsWitness { engine.requestProcessWitness() }
+            if let alert = outcome.alert { deliver(alert) }
+        }
     }
 
     // MARK: Delivery
+
+    private func deliver(_ alert: SmartAlert) {
+        var info: [AnyHashable: Any] = [:]
+        if let pid = alert.pid { info["pid"] = Int(pid) }
+        if let name = alert.processName { info["name"] = name }
+        authority.post(identifier: alert.identifier, title: alert.title, body: alert.body,
+                       category: alert.category == .plain ? nil : alert.category.rawValue,
+                       userInfo: info)
+        WindowLog.log("notification posted smart=\(alert.identifier)")
+    }
+
+    /// Quit asks the process to quit, after checking the pid still belongs to it: a
+    /// notification read an hour later may name a pid the system has since reused.
+    /// Ignore remembers the name so the runaway watch stops warning about it.
+    private func handle(_ action: String, _ info: [AnyHashable: Any]) {
+        guard let name = info["name"] as? String else { return }
+        switch action {
+        case NotificationAuthority.quitAction:
+            guard let pid = (info["pid"] as? Int).map(Int32.init), ProcessName.of(pid) == name else { return }
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                app.terminate()
+            } else {
+                kill(pid, SIGTERM)
+            }
+        case NotificationAuthority.ignoreAction:
+            settings.update { s in
+                if !s.notifications.ignoredRunaways.contains(name) {
+                    s.notifications.ignoredRunaways.append(name)
+                }
+            }
+        default:
+            break
+        }
+    }
 
     private func deliver(_ alert: ThresholdAlert) {
         // One identifier per rule, so a rule that fires again after its cooldown

@@ -29,6 +29,22 @@ struct NotificationsPane: View {
             }
 
             Section {
+                Toggle("A process keeps a core busy while you are away",
+                       isOn: settings.binding(\.notifications.notifiesOnRunaway))
+                Toggle("Something is unusual for this Mac",
+                       isOn: settings.binding(\.notifications.notifiesOnUnusual))
+                Toggle("A heavy app is running when you unplug",
+                       isOn: settings.binding(\.notifications.notifiesOnHeavyUnplug))
+                ignoredRow
+            } header: {
+                Text("Smart alerts")
+            } footer: {
+                SettingsFootnote("Worked out from what this Mac usually does rather than from a "
+                                 + "threshold. \"Unusual\" needs about a week of history first.")
+            }
+            .disabled(!isEnabled)
+
+            Section {
                 ForEach(rules) { rule in
                     ruleRows(rule)
                 }
@@ -40,6 +56,21 @@ struct NotificationsPane: View {
 
         }
         .settingsFormStyle()
+    }
+
+    /// The processes "Ignore" was pressed for, with a way to hear about them again.
+    @ViewBuilder
+    private var ignoredRow: some View {
+        let ignored = settings.settings.notifications.ignoredRunaways
+        if !ignored.isEmpty {
+            HStack(alignment: .firstTextBaseline) {
+                SettingsFootnote("Not warning about \(ignored.joined(separator: ", ")).")
+                Spacer(minLength: Design.Space.m)
+                Button("Warn Again") {
+                    settings.update { $0.notifications.ignoredRunaways = [] }
+                }
+            }
+        }
     }
 
     // MARK: Permission

@@ -346,3 +346,114 @@ struct NetworkDiagnosisTests {
                                       internetLatency: .value(0.4), internetLoss: .value(0)) == nil)
     }
 }
+
+@Suite("Alerts worked out from the Mac")
+struct SmartAlertTests {
+    private let formatter = MetricFormatter(settings: GeneralSettings())
+
+    private func row(_ pid: Int32, _ name: String, cpu: Double = 0, watts: Double? = nil,
+                     apple: Bool = false) -> ProcessRow {
+        var r = ProcessRow(pid: pid, name: name, cpuPercent: cpu, memoryBytes: 0)
+        r.energyImpact = watts
+        r.isAppleSignedSystem = apple
+        return r
+    }
+
+    @Test("a core kept busy for ten minutes while away is a runaway, once")
+    func runaway() {
+        var watch = RunawayWatch()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var alerts: [SmartAlert] = []
+        for minute in 0...11 {
+            let now = start.addingTimeInterval(Double(minute) * 60)
+            if let alert = watch.update(processes: [row(42, "node", cpu: 98)], ownPID: 1,
+                                        idle: 3_600, ignored: [], now: now) {
+                alerts.append(alert)
+            }
+        }
+        #expect(alerts.count == 1)
+        #expect(alerts.first?.pid == 42)
+        #expect(alerts.first?.category == .runaway)
+    }
+
+    @Test("not while someone is at the Mac, not for Apple's own, not when ignored")
+    func runawayExclusions() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        func run(_ rows: [ProcessRow], idle: TimeInterval, ignored: Set<String> = []) -> Int {
+            var watch = RunawayWatch()
+            var count = 0
+            for minute in 0...15 {
+                let now = start.addingTimeInterval(Double(minute) * 60)
+                if watch.update(processes: rows, ownPID: 1, idle: idle, ignored: ignored, now: now) != nil { count += 1 }
+            }
+            return count
+        }
+        #expect(run([row(42, "node", cpu: 98)], idle: 5) == 0)
+        #expect(run([row(43, "mds_stores", cpu: 98, apple: true)], idle: 3_600) == 0)
+        #expect(run([row(44, "node", cpu: 98)], idle: 3_600, ignored: ["node"]) == 0)
+    }
+
+    @Test("a minute without it ends the streak")
+    func runawayGap() {
+        var watch = RunawayWatch()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var fired = false
+        for minute in 0...12 where minute != 6 {
+            let now = start.addingTimeInterval(Double(minute) * 60 + (minute > 6 ? 120 : 0))
+            if watch.update(processes: [row(42, "node", cpu: 98)], ownPID: 1, idle: 3_600, ignored: [], now: now) != nil {
+                fired = true
+            }
+        }
+        #expect(!fired)
+    }
+
+    @Test("unusual needs a week of this hour and a clear margin")
+    func unusual() {
+        let usual = UnusualWatch.Usual(median: 0.12, spread: 0.03)
+        #expect(UnusualWatch.isUnusual(current: 0.64, usual: usual, floor: 0.35, margin: 0.25))
+        #expect(!UnusualWatch.isUnusual(current: 0.30, usual: usual, floor: 0.35, margin: 0.25))
+        // A Mac that is often busy at this hour does not alert on being busy.
+        let noisy = UnusualWatch.Usual(median: 0.4, spread: 0.2)
+        #expect(!UnusualWatch.isUnusual(current: 0.8, usual: noisy, floor: 0.35, margin: 0.25))
+    }
+
+    @Test("the usual is the median of this hour on earlier days")
+    func usualFromMonth() {
+        var month = MinuteHistory(capacity: MinuteHistory.monthCapacity,
+                                  bucketDuration: MinuteHistory.monthBucketDuration)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        for day in stride(from: 10, through: 1, by: -1) {
+            month.advance(to: now.addingTimeInterval(-86_400 * Double(day)))
+            month.record(.cpuTotal, day == 3 ? 0.9 : 0.1)
+        }
+        month.advance(to: now)
+        let usual = UnusualWatch.usual(.cpuTotal, month: month, now: now)
+        #expect(abs((usual?.median ?? 0) - 0.1) < 1e-6)
+        #expect(UnusualWatch.usual(.cpuTemperature, month: month, now: now) == nil)
+    }
+
+    @Test("unplugging asks for a read, then names a heavy app with what quitting it buys")
+    func unplug() {
+        var watch = UnplugWatch()
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        var power = PowerSnapshot()
+        power.hasBattery = true
+        power.isPluggedIn = true
+        _ = watch.update(power: power, processes: nil, ownPID: 1, formatter: formatter, now: start)
+        power.isPluggedIn = false
+        power.batteryWatts = -12
+        power.timeToEmpty = 2 * 3_600
+        let first = watch.update(power: power, processes: nil, ownPID: 1, formatter: formatter,
+                                 now: start.addingTimeInterval(2))
+        #expect(first.requestsWitness)
+        #expect(first.alert == nil)
+        let second = watch.update(power: power, processes: [row(7, "com.docker.backend", watts: 6)],
+                                  ownPID: 1, formatter: formatter, now: start.addingTimeInterval(6))
+        #expect(second.alert?.pid == 7)
+        #expect(second.alert?.body.contains("Quitting it would add about") == true)
+        // Settled: no second word about the same unplugging.
+        let third = watch.update(power: power, processes: [row(7, "com.docker.backend", watts: 6)],
+                                 ownPID: 1, formatter: formatter, now: start.addingTimeInterval(10))
+        #expect(third.alert == nil)
+    }
+}
