@@ -43,6 +43,11 @@ if [ -d Resources/AppIcon.icon ]; then
     --minimum-deployment-target "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' Resources/Info.plist)" \
     --output-partial-info-plist "$BIN_DIR/AppIcon-partial.plist" >/dev/null
   /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist"
+  # actool's flattened .icns scales the one design to every size. A hand-cut .icns
+  # beside the .icon replaces it, so macOS 14 and 15 get the simpler small sizes.
+  if [ -f Resources/AppIcon.icns ]; then
+    cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+  fi
 elif [ -f Resources/AppIcon.icns ]; then
   cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 fi
