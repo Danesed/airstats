@@ -211,6 +211,9 @@ public final class MenuBarContentView: NSView {
     /// The accessibility value travels separately, on the model the owner keeps.
     static func drawnFields(of model: MenuBarRenderModel) -> MenuBarRenderModel {
         var model = model
+        // Spoken, never drawn, and exact to the byte, so it changed on every tick.
+        // The spoken value reaches the button separately; see `StatusItemController`.
+        for index in model.items.indices { model.items[index].accessibilityLabel = "" }
         for index in model.items.indices
         where !model.items[index].style.drawsValue && !model.items[index].isUnavailable {
             model.items[index].primary.valueText = ""

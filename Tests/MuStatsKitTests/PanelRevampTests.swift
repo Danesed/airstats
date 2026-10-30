@@ -518,3 +518,36 @@ struct CalmMenuBarTests {
     }
 }
 
+
+@Suite("The menu bar holds changes nobody could see")
+struct MenuBarStabilizerTests {
+    @Test("a rate within a fifth in the same unit is held; a unit change is not")
+    func rates() {
+        func line(_ s: String) -> MenuBarLine { MenuBarLine(valueText: s, widestText: "999 KB/s") }
+        #expect(MenuBarStabilizer.isSmallChange(line("340 KB/s"), line("352 KB/s")))
+        #expect(!MenuBarStabilizer.isSmallChange(line("340 KB/s"), line("520 KB/s")))
+        #expect(!MenuBarStabilizer.isSmallChange(line("980 KB/s"), line("1.0 MB/s")))
+        #expect(MenuBarStabilizer.isSmallChange(line("3 KB/s"), line("9 KB/s")))
+        // Not a rate: a percentage has its own rules and is never held here.
+        #expect(!MenuBarStabilizer.isSmallChange(line("34%"), line("35%")))
+    }
+
+    @Test("a bar moves only by a visible step")
+    func levels() {
+        var settings = Settings()
+        settings.menuBar.items = [MenuBarItemConfig(metric: .cpuUsage, style: .bar)]
+        var stabilizer = MenuBarStabilizer()
+        var first = MenuBarRenderModel(snapshot: SnapshotFixtures.nominal, history: MetricHistory(),
+                                       settings: settings, isStale: false)
+        first.items[0].level = 0.30
+        stabilizer.apply(&first)
+        var small = first
+        small.items[0].level = 0.32
+        stabilizer.apply(&small)
+        #expect(small.items[0].level == 0.30)
+        var big = first
+        big.items[0].level = 0.40
+        stabilizer.apply(&big)
+        #expect(big.items[0].level == 0.40)
+    }
+}

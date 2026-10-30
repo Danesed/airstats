@@ -258,6 +258,7 @@ public final class StatusItemController {
                                        settings: settings.settings,
                                        isStale: engine.isStale)
         model.moustache = Moustache.growth()
+        stabilizer.apply(&model)
         for entry in hosted {
             let slice = StatusItemController.slice(model, readout: entry.readout)
             // Read out whether or not the drawing changed: a bar's number is spoken but
@@ -271,6 +272,9 @@ public final class StatusItemController {
             if entry.item.length != width { entry.item.length = width }
         }
     }
+
+    /// Holds sub-pixel and within-noise changes back from the bar. See its type.
+    private var stabilizer = MenuBarStabilizer()
 
     /// The CPU temperature the menu bar last showed. See `steadied(_:)`.
     private var shownTemperature: Double?
