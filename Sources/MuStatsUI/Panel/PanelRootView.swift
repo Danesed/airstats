@@ -14,7 +14,18 @@ final class PanelLayoutState {
     var disclosureOrigin: Set<PanelModule>?
     var isDisclosureTransitionActive = false
     var focusedModule: PanelModule?
+    /// The tab picked in the open panel. Here rather than in the view so the
+    /// controller can move the panel to its new height as one transition.
+    var pickedTab: PanelTab?
+    /// The surface's height while a transition animates it, and the height of the
+    /// still window it animates inside. Both nil when nothing is moving: the surface
+    /// then takes the window's height and the window its content's.
+    var surfaceHeight: CGFloat?
+    var canvasHeight: CGFloat?
     @ObservationIgnored var toggleModule: ((PanelModule) -> Void)?
+    @ObservationIgnored var switchTab: ((PanelTab) -> Void)?
+    /// Each frame of a transition, with the surface's height on that frame.
+    @ObservationIgnored var onSurfaceHeight: ((CGFloat) -> Void)?
 }
 
 /// Root of the click-down panel.
@@ -62,35 +73,46 @@ public struct PanelRootView: View {
                 PanelInsightRow(insight: insight, open: open)
                     .padding(.horizontal, Design.Space.s)
                     .padding(.top, Design.Space.s)
+                    // Unfolds rather than appearing whole, so switching tabs moves the
+                    // rows below it as smoothly as the panel's edge.
+                    .transition(.disclosure)
             }
             ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 0) {
+                // Overlaid rather than stacked: while one tab fades into the next both
+                // are on screen, and stacked the new one would start out below the old.
+                ZStack(alignment: .topLeading) {
                     if shownTab == .chip {
                         PanelLiveChip(engine: engine)
                             .panelCard()
                             .padding(.top, Design.Space.s)
+                            .transition(.opacity)
                     } else if shownTab == .today {
                         PanelTodayCard(engine: engine, settings: settings) { module in
+                            layout?.pickedTab = .now
                             pickedTab = .now
                             open(module)
                         }
                         .panelCard()
                         .padding(.top, Design.Space.s)
+                        .transition(.opacity)
                     } else {
                         let captionColumnWidth = captionColumnWidth
                         let nameColumnWidth = nameColumnWidth
-                        ForEach(PanelGroup.arrange(modules), id: \.group) { entry in
-                            PanelGroupLabel(entry.group.title)
-                            VStack(alignment: .leading, spacing: 0) {
-                                ForEach(Array(entry.modules.enumerated()), id: \.element) { index, module in
-                                    if index > 0 { PanelSeparator() }
-                                    moduleView(module, captionColumnWidth: captionColumnWidth,
-                                               nameColumnWidth: nameColumnWidth)
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(PanelGroup.arrange(modules), id: \.group) { entry in
+                                PanelGroupLabel(entry.group.title)
+                                VStack(alignment: .leading, spacing: 0) {
+                                    ForEach(Array(entry.modules.enumerated()), id: \.element) { index, module in
+                                        if index > 0 { PanelSeparator() }
+                                        moduleView(module, captionColumnWidth: captionColumnWidth,
+                                                   nameColumnWidth: nameColumnWidth)
+                                    }
                                 }
+                                .padding(.vertical, Design.Space.xxs)
+                                .panelCard()
                             }
-                            .padding(.vertical, Design.Space.xxs)
-                            .panelCard()
                         }
+                        .transition(.opacity)
                     }
                 }
                 .padding(.bottom, Design.Space.s)
@@ -137,8 +159,19 @@ public struct PanelRootView: View {
     @Environment(\.panelInitialTab) private var initialTab
 
     private var tab: Binding<PanelTab> {
-        Binding(get: { pickedTab ?? initialTab }, set: { pickedTab = $0 })
+        Binding(get: { picked ?? initialTab }, set: { tab in
+            guard tab != shownTab else { return }
+            if let switchTab = layout?.switchTab {
+                switchTab(tab)
+            } else {
+                pickedTab = tab
+            }
+        })
     }
+
+    /// The controller's pick when there is one, so a switch it is animating is
+    /// what the tree shows; the view's own state in renders and previews.
+    private var picked: PanelTab? { layout?.pickedTab ?? pickedTab }
 
     /// Now, then the extras the user has switched on.
     private var availableTabs: [PanelTab] {
@@ -150,7 +183,7 @@ public struct PanelRootView: View {
 
     /// A tab switched off is Now, whatever was picked before it went off.
     private var shownTab: PanelTab {
-        let wanted = pickedTab ?? initialTab
+        let wanted = picked ?? initialTab
         return availableTabs.contains(wanted) ? wanted : .now
     }
 

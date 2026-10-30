@@ -155,9 +155,12 @@ public enum Design {
     public enum Motion {
         /// Numeric readouts crossfading to a new value.
         public static let value = Animation.easeOut(duration: 0.18)
-        /// A module revealing or hiding its detail while the panel follows its height.
-        public static let disclosureDuration: TimeInterval = 0.18
-        public static let disclosure = Animation.easeOut(duration: disclosureDuration)
+        /// A module revealing or hiding its detail while the panel follows its height,
+        /// and the panel moving between tabs. A spring with no bounce rather than a
+        /// fixed curve: it leaves at speed, settles softly, and an interrupted one
+        /// carries its velocity into the next instead of restarting from rest.
+        public static let disclosureDuration: TimeInterval = 0.26
+        public static let disclosure = Animation.smooth(duration: disclosureDuration)
         /// A history plot arriving once the rows above it have finished unfolding.
         public static let chartReveal = Animation.easeOut(duration: 0.12)
         ///
