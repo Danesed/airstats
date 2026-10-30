@@ -53,7 +53,7 @@ public final class DiskCollector: MetricSource {
     /// longer), so it runs on its own cadence while the I/O counters below are read
     /// on every sample.
     private let volumeScanInterval: TimeInterval = 15
-    private let purgeableScanInterval: TimeInterval = 60
+    private let purgeableScanInterval: TimeInterval = 300
 
     private static let volumeKeys: [URLResourceKey] = [
         .volumeNameKey, .volumeTotalCapacityKey, .volumeAvailableCapacityKey,
@@ -234,7 +234,7 @@ extension DiskCollector {
     /// has to walk its purgeable accounting to answer. Two things follow: it cannot
     /// run on the sampling cadence, and it cannot run for every mount at once or the
     /// cost would scale with the number of attached drives. So one volume is refreshed
-    /// per minute and the result is cached as *purgeable bytes* rather than as an
+    /// every five minutes and the result is cached as *purgeable bytes* rather than as an
     /// available total — purgeable space is the slow-moving half of that sum (caches
     /// and snapshots), while free space moves every second, so `free + purgeable`
     /// tracks reality between refreshes and is exact at each one.
