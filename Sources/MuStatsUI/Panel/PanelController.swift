@@ -26,7 +26,6 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// window while another show/hide cycle fades out.
     internal private(set) var window: PanelWindow?
     private var layout: PanelLayoutState?
-    private var isDisclosureTransitionActive = false
 
     /// Every `NSEvent` monitor and notification observer this controller owns, in one
     /// place. Two collections, one lifetime: they are installed together when the
@@ -117,18 +116,15 @@ public final class PanelController: NSObject, NSWindowDelegate {
         presentation &+= 1
         let generation = presentation
         isVisible = false
-        // A disclosure interrupted by a dismiss would otherwise hold its transition
-        // flag until the deadline fired; nothing is mid-flight once the panel is
-        // gone, and the next open must not find every click ignored.
-        isDisclosureTransitionActive = false
-        transitionGeneration &+= 1
+        // Nothing is mid-flight once the panel is gone; the next open places the
+        // window afresh.
+        canvasGeneration &+= 1
+        heightChangesRunning = 0
+        shadowLink?.invalidate()
+        shadowLink = nil
         layout?.isDisclosureTransitionActive = false
-        layout?.collapsedModulesOverride = nil
-        layout?.focusedModule = nil
-        layout?.disclosureOrigin = nil
-        layout?.surfaceHeight = nil
         layout?.canvasHeight = nil
-        layout?.onSurfaceHeight = nil
+        layout?.focusedModule = nil
         NSAnimationContext.runAnimationGroup { context in
             context.duration = motionDuration * 0.7
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -223,164 +219,129 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     // MARK: Geometry
 
-    /// Toggle one module as a single transition. See `transition`.
+    /// Open or close one module. See `animateHeightChange`.
     func toggleModule(_ module: PanelModule) {
-        guard !isDisclosureTransitionActive else { return }
-
-        let current = settings.settings.panel.collapsedModules
         let target = settings.settings.panel.collapsedModules(toggling: module)
-
-        guard let window, isVisible, let layout else {
+        animateHeightChange { [settings] in
             settings.update { $0.panel.collapsedModules = target }
-            return
         }
-        WindowLog.log("disclosure \(module.rawValue) win=\(window.frame)")
-        transition(window: window, layout: layout,
-                   enter: { $0.disclosureOrigin = current },
-                   stage: { $0.collapsedModulesOverride = target },
-                   restore: { $0.collapsedModulesOverride = current },
-                   persist: { [settings] in settings.update { $0.panel.collapsedModules = target } },
-                   settle: {
-                       $0.collapsedModulesOverride = nil
-                       $0.disclosureOrigin = nil
-                   })
     }
 
     /// Switch the panel's tab, moving it to the new tab's height the same way.
     private func switchTab(to tab: PanelTab) {
-        guard !isDisclosureTransitionActive else { return }
-        guard let window, isVisible, let layout else {
-            layout?.pickedTab = tab
-            return
-        }
-        let current = layout.pickedTab
-        transition(window: window, layout: layout,
-                   stage: { $0.pickedTab = tab },
-                   restore: { $0.pickedTab = current })
+        animateHeightChange { [weak layout] in layout?.pickedTab = tab }
     }
 
-    /// Change the panel's content and height as one animation.
+    /// Make a change that moves the panel's height, animated.
     ///
-    /// The final hierarchy is staged synchronously to measure the one frame the window
-    /// will end on, and the current hierarchy is restored before anything is drawn.
-    /// The window then takes the room both heights need, which nobody can see: the
-    /// surface is held at its current height and everything below it is transparent.
-    /// One SwiftUI animation moves the content and the surface together, on the
-    /// render loop and in step, and the window is cut to the destination when it
-    /// ends. AppKit never animates a frame, so no frame waits on a window resize.
-    private func transition(window: NSWindow, layout: PanelLayoutState,
-                            enter: (PanelLayoutState) -> Void = { _ in },
-                            stage: (PanelLayoutState) -> Void,
-                            restore: (PanelLayoutState) -> Void,
-                            persist: () -> Void = {},
-                            settle: @escaping (PanelLayoutState) -> Void = { _ in }) {
-        isDisclosureTransitionActive = true
-
-        var transaction = Transaction(animation: nil)
-        transaction.disablesAnimations = true
-        // Measure the final hierarchy without allowing the staging state to animate or
-        // reach the screen. The window itself remains on its current frame throughout.
-        // One pass: the scroll view never shows an indicator, so entering the
-        // transition no longer needs a pass of its own.
-        withTransaction(transaction) {
-            layout.isDisclosureTransitionActive = true
-            enter(layout)
-            stage(layout)
-        }
-        window.layoutIfNeeded()
-        let fitting = window.contentView?.fittingSize
-            ?? NSSize(width: PanelSettings.width, height: window.frame.height)
-        let destination = targetFrame(for: fitting, anchoredTo: lastAnchor, on: lastScreen)
-        let start = window.frame
-        WindowLog.log("transition fitting=\(fitting) dest=\(destination) win=\(start)")
-
-        withTransaction(transaction) { restore(layout) }
-        window.layoutIfNeeded()
-        // Persist behind the presentation override so this write cannot restructure the
-        // visible tree before the transition begins.
-        persist()
-
-        transitionGeneration &+= 1
-        let generation = transitionGeneration
-
-        // Reduce Motion: nothing to animate, so the ordering is the whole job. The
-        // window is taken to the frame that fits the final hierarchy and the
-        // hierarchy is changed in the same unanimated pass.
-        guard Design.Motion.respectingAccessibility(Design.Motion.disclosure) != nil else {
-            withTransaction(transaction) { stage(layout) }
-            finishTransition(window: window, layout: layout, destination: destination, settle: settle)
+    /// The window is first held at all the room below the status item, which nobody
+    /// sees: everything below the surface is transparent. Then the change is made in
+    /// an animation, and SwiftUI moves the content and the surface hugging it on its
+    /// own render loop. Nothing is measured beforehand, so the first frame follows
+    /// the click at once, and a click while one is running simply retargets it. The
+    /// window is cut back to the surface when the last running change has settled.
+    private func animateHeightChange(_ change: () -> Void) {
+        guard let window, isVisible, let layout,
+              let animation = Design.Motion.respectingAccessibility(Design.Motion.disclosure) else {
+            // Reduce Motion, or no panel on screen: the content resize path places
+            // the window once the change has laid out.
+            change()
             return
         }
-
-        // Hold the surface where it is and give the window the room both heights need.
-        withTransaction(transaction) {
-            layout.surfaceHeight = start.height
-            layout.canvasHeight = max(start.maxY, destination.maxY) - min(start.minY, destination.minY)
+        holdCanvas(window: window, layout: layout)
+        heightChangesRunning += 1
+        lastHeightChange = Date()
+        let generation = canvasGeneration
+        withAnimation(animation, completionCriteria: .removed) {
+            change()
+        } completion: { [weak self] in
+            guard let self, self.canvasGeneration == generation else { return }
+            self.heightChangesRunning = max(self.heightChangesRunning - 1, 0)
+            if self.heightChangesRunning == 0 { self.releaseCanvas() }
         }
-        let canvas = NSRect(x: destination.minX, y: min(start.minY, destination.minY),
-                            width: destination.width, height: layout.canvasHeight ?? start.height)
+        // A completion that never comes would leave the window held, transparent
+        // and taller than the panel, for as long as the panel stays open. It has not
+        // been seen to fail, but the clock ends the hold if nothing has moved for a
+        // good while after the last change.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard let self, self.canvasGeneration == generation, self.heightChangesRunning > 0,
+                  Date().timeIntervalSince(self.lastHeightChange) >= 1.4 else { return }
+            self.heightChangesRunning = 0
+            self.releaseCanvas()
+        }
+    }
+
+    /// Changes animating now. The window is held while there is any.
+    private var heightChangesRunning = 0
+    private var lastHeightChange = Date.distantPast
+    /// Bumped whenever a hold ends, so a late completion from an earlier one cannot
+    /// end the next.
+    private var canvasGeneration = 0
+    /// Keeps the window's shadow on the surface while the surface moves.
+    private var shadowLink: CADisplayLink?
+
+    private var isHoldingCanvas: Bool { layout?.canvasHeight != nil }
+
+    /// Give the window all the room below the status item, without anything visible
+    /// moving: the surface keeps hugging its content at the top.
+    private func holdCanvas(window: NSWindow, layout: PanelLayoutState) {
+        guard layout.canvasHeight == nil else { return }
+        let room = targetFrame(for: NSSize(width: window.frame.width, height: .greatestFiniteMagnitude),
+                               anchoredTo: lastAnchor, on: lastScreen)
+        // Only the bottom edge moves. The top and the sides are where the panel is
+        // now, exactly: a canvas placed afresh landed a few points higher than the
+        // resting panel, which then jumped up when the hold began and back down when
+        // it ended. Never shorter than now, should the room have shrunk meanwhile.
+        let current = window.frame
+        let bottom = min(room.minY, current.minY)
+        let canvas = NSRect(x: current.minX, y: bottom, width: current.width, height: current.maxY - bottom)
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            layout.canvasHeight = canvas.height
+            layout.isDisclosureTransitionActive = true
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         window.setFrame(canvas, display: false)
-        window.layoutIfNeeded()
         CATransaction.commit()
 
         // The window draws its shadow from what is opaque in it, and only works that
-        // out again when asked, so it is asked on every frame the surface moves.
-        layout.onSurfaceHeight = { [weak window] _ in window?.invalidateShadow() }
-
-        withAnimation(Design.Motion.disclosure, completionCriteria: .logicallyComplete) {
-            stage(layout)
-            layout.surfaceHeight = destination.height
-        } completion: { [weak self, weak window, weak layout] in
-            guard let self, let window, let layout,
-                  self.transitionGeneration == generation,
-                  self.isDisclosureTransitionActive else { return }
-            self.finishTransition(window: window, layout: layout, destination: destination, settle: settle)
+        // out again when asked, so it is asked on every frame the surface may move.
+        if shadowLink == nil, let view = window.contentView {
+            let link = view.displayLink(target: self, selector: #selector(refreshShadow))
+            link.add(to: .main, forMode: .common)
+            shadowLink = link
         }
-        // A completion that never comes would leave every click ignored and every
-        // resize dropped for the life of the window. It has not been seen to fail,
-        // but the cost of being wrong is a dead panel, so the transition is ended by
-        // the clock if it is still open well after the animation should be over.
-        Task { @MainActor [weak self, weak window, weak layout] in
-            try? await Task.sleep(for: .milliseconds(Int(Design.Motion.disclosureDuration * 1000) + 600))
-            guard let self, let window, let layout,
-                  self.transitionGeneration == generation,
-                  self.isDisclosureTransitionActive else { return }
-            self.finishTransition(window: window, layout: layout, destination: destination, settle: settle)
-        }
+        WindowLog.log("canvas held \(canvas)")
     }
 
-    /// Identifies a transition's own completions, so a late one from an earlier
-    /// transition cannot end this one.
-    private var transitionGeneration = 0
+    @objc private func refreshShadow() {
+        window?.invalidateShadow()
+    }
 
-    /// Cut the window to the surface and hand the height back to the content, in one
-    /// unanimated pass, so the last frame of the animation and the first still frame
-    /// are the same picture.
-    private func finishTransition(window: NSWindow, layout: PanelLayoutState, destination: NSRect,
-                                  settle: (PanelLayoutState) -> Void) {
+    /// Cut the window back to the surface, in one unanimated pass, so the last frame
+    /// of the animation and the first still frame are the same picture.
+    private func releaseCanvas() {
+        canvasGeneration &+= 1
+        heightChangesRunning = 0
+        shadowLink?.invalidate()
+        shadowLink = nil
+        guard let window, let layout, layout.canvasHeight != nil else { return }
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
-        layout.onSurfaceHeight = nil
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         withTransaction(transaction) {
-            settle(layout)
-            layout.surfaceHeight = nil
             layout.canvasHeight = nil
             layout.isDisclosureTransitionActive = false
         }
-        window.setFrame(destination, display: false)
-        window.layoutIfNeeded()
+        position(window, anchoredTo: lastAnchor, on: lastScreen)
         window.displayIfNeeded()
         window.invalidateShadow()
         CATransaction.commit()
-        isDisclosureTransitionActive = false
-        // Resolve any sub-point discrepancy between the measured destination and the
-        // final intrinsic size without producing a second visible move.
-        position(window, anchoredTo: lastAnchor, on: lastScreen)
-        WindowLog.log("transition finished win=\(window.frame)")
+        WindowLog.log("canvas released win=\(window.frame)")
     }
 
     /// Anchor under the status item, nudged so the panel never hangs off the screen,
@@ -472,7 +433,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
     /// SwiftUI can invalidate its size several times in one layout pass, so the
     /// window is re-measured once on the next turn rather than on every invalidation.
     private func scheduleContentResize() {
-        guard !isDisclosureTransitionActive else { return }
+        guard !isHoldingCanvas else { return }
         guard !hasPendingResize else { return }
         hasPendingResize = true
         Task { @MainActor [weak self] in
@@ -481,7 +442,7 @@ public final class PanelController: NSObject, NSWindowDelegate {
             // A resize queued on the turn before a click would otherwise fire mid-
             // transition and snap the window to the destination unanimated.
             guard let window = self.window, self.isVisible,
-                  !self.isDisclosureTransitionActive else { return }
+                  !self.isHoldingCanvas else { return }
             self.position(window, anchoredTo: self.lastAnchor, on: self.lastScreen)
         }
     }
@@ -490,9 +451,10 @@ public final class PanelController: NSObject, NSWindowDelegate {
 
     /// SwiftUI grows the window downwards from its bottom-left corner; re-running the
     /// placement re-pins it under the status item and re-applies the height cap.
-    /// During a transition the window is held on purpose and is placed when it ends.
+    /// While the panel changes height the window is held on purpose and is placed
+    /// when the change ends.
     public func windowDidResize(_ notification: Notification) {
-        guard let window, isVisible, !isPositioning, !isDisclosureTransitionActive else { return }
+        guard let window, isVisible, !isPositioning, !isHoldingCanvas else { return }
         position(window, anchoredTo: lastAnchor, on: lastScreen)
     }
 

@@ -4,28 +4,22 @@ import Observation
 import MuStatsKit
 
 /// Ephemeral presentation state shared by the panel's SwiftUI tree and its AppKit
-/// controller. Settings remain the durable truth; the override exists only long enough
-/// to measure and animate one disclosure as a coordinated transaction.
+/// controller. Settings remain the durable truth.
 @MainActor
 @Observable
 final class PanelLayoutState {
-    var collapsedModulesOverride: Set<PanelModule>?
-    /// The collapsed set a disclosure started from, held until it has finished.
-    var disclosureOrigin: Set<PanelModule>?
+    /// True while the panel is changing height. Hover highlights wait it out, so a
+    /// row sliding under a still pointer does not flash.
     var isDisclosureTransitionActive = false
     var focusedModule: PanelModule?
     /// The tab picked in the open panel. Here rather than in the view so the
-    /// controller can move the panel to its new height as one transition.
+    /// controller can give the switch room to animate.
     var pickedTab: PanelTab?
-    /// The surface's height while a transition animates it, and the height of the
-    /// still window it animates inside. Both nil when nothing is moving: the surface
-    /// then takes the window's height and the window its content's.
-    var surfaceHeight: CGFloat?
+    /// The height of the window held open while the panel changes height, nil when
+    /// nothing is moving. See `PanelSurface`.
     var canvasHeight: CGFloat?
     @ObservationIgnored var toggleModule: ((PanelModule) -> Void)?
     @ObservationIgnored var switchTab: ((PanelTab) -> Void)?
-    /// Each frame of a transition, with the surface's height on that frame.
-    @ObservationIgnored var onSurfaceHeight: ((CGFloat) -> Void)?
 }
 
 /// Root of the click-down panel.
@@ -78,13 +72,15 @@ public struct PanelRootView: View {
                     .transition(.disclosure)
             }
             ScrollView(.vertical) {
-                // Overlaid rather than stacked: while one tab fades into the next both
-                // are on screen, and stacked the new one would start out below the old.
-                ZStack(alignment: .topLeading) {
+                // Overlaid rather than stacked, and as tall as the tab being shown:
+                // while one tab fades into the next both are on screen, and stacked
+                // the new one would start out below the old.
+                PanelTabStack(shown: shownTab) {
                     if shownTab == .chip {
                         PanelLiveChip(engine: engine)
                             .panelCard()
                             .padding(.top, Design.Space.s)
+                            .layoutValue(key: PanelTabKey.self, value: .chip)
                             .transition(.opacity)
                     } else if shownTab == .today {
                         PanelTodayCard(engine: engine, settings: settings) { module in
@@ -94,6 +90,7 @@ public struct PanelRootView: View {
                         }
                         .panelCard()
                         .padding(.top, Design.Space.s)
+                        .layoutValue(key: PanelTabKey.self, value: .today)
                         .transition(.opacity)
                     } else {
                         let captionColumnWidth = captionColumnWidth
@@ -112,6 +109,7 @@ public struct PanelRootView: View {
                                 .panelCard()
                             }
                         }
+                        .layoutValue(key: PanelTabKey.self, value: .now)
                         .transition(.opacity)
                     }
                 }
@@ -213,7 +211,7 @@ public struct PanelRootView: View {
 
     /// The module open now, which decides the tab Activity Monitor opens on.
     private var openModule: PanelModule? {
-        let collapsed = layout?.collapsedModulesOverride ?? settings.settings.panel.collapsedModules
+        let collapsed = settings.settings.panel.collapsedModules
         return modules.first { !collapsed.contains($0) }
     }
 
@@ -224,8 +222,7 @@ public struct PanelRootView: View {
 
     /// Opens the module the insight is about, unless it already is.
     private func open(_ module: PanelModule) {
-        let collapsed = layout?.collapsedModulesOverride ?? settings.settings.panel.collapsedModules
-        guard collapsed.contains(module) else { return }
+        guard settings.settings.panel.collapsedModules.contains(module) else { return }
         if let toggle = layout?.toggleModule {
             toggle(module)
         } else {
@@ -250,6 +247,33 @@ public struct PanelRootView: View {
         })
     }
 
+}
+
+private struct PanelTabKey: LayoutValueKey {
+    static let defaultValue: PanelTab? = nil
+}
+
+/// The tabs, one over another, sized by the one being shown.
+///
+/// A `ZStack` is as tall as its tallest child, and the tab fading out is still a child
+/// until it has gone, so leaving a long tab for a short one held the panel long until
+/// the fade ended and then dropped it in one step. Sized by the shown tab, the panel
+/// starts towards the new height at once, and the outgoing tab is clipped as it fades.
+private struct PanelTabStack: Layout {
+    var shown: PanelTab
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let current = subviews.first(where: { $0[PanelTabKey.self] == shown }) ?? subviews.last
+        else { return .zero }
+        return current.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(at: bounds.origin, anchor: .topLeading,
+                          proposal: ProposedViewSize(width: bounds.width, height: nil))
+        }
+    }
 }
 
 enum PanelTab: Hashable {

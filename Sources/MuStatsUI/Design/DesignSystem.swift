@@ -159,10 +159,8 @@ public enum Design {
         /// and the panel moving between tabs. A spring with no bounce rather than a
         /// fixed curve: it leaves at speed, settles softly, and an interrupted one
         /// carries its velocity into the next instead of restarting from rest.
-        public static let disclosureDuration: TimeInterval = 0.26
+        public static let disclosureDuration: TimeInterval = 0.2
         public static let disclosure = Animation.smooth(duration: disclosureDuration)
-        /// A history plot arriving once the rows above it have finished unfolding.
-        public static let chartReveal = Animation.easeOut(duration: 0.12)
         ///
         /// Panel present/dismiss.
         public static let present = Animation.easeOut(duration: 0.14)

@@ -7,11 +7,11 @@ import AppKit
 /// by resizing the window, and AppKit animates a window frame on the main thread:
 /// each step lays out the whole tree, resizes the glass and asks the window server
 /// for a new surface. On a 120 Hz display a 180 ms open drew 7 to 15 of its 22
-/// frames, with gaps up to 45 ms. Now the window is given the larger of the two
-/// heights before anything moves, the surface animates inside it in one SwiftUI
-/// transaction together with the content it reveals, and the window is cut to size
-/// once the surface has arrived. The space below the surface is transparent, and
-/// only exists for the length of the animation.
+/// frames. Now, while the panel changes height, the window is held at all the room
+/// below the status item, transparent, and the surface hugs its content inside it,
+/// so a module opening or a tab changing is an ordinary SwiftUI animation: nothing
+/// has to be measured before it starts, and a second click retargets the one in
+/// flight. The window is cut back to the surface once everything has settled.
 struct PanelSurface<Content: View>: View {
     let layout: PanelLayoutState
     @ViewBuilder let content: Content
@@ -21,38 +21,32 @@ struct PanelSurface<Content: View>: View {
     }
 
     var body: some View {
-        content
-            .modifier(SurfaceHeight(height: layout.surfaceHeight ?? 0, isHeld: layout.surfaceHeight != nil,
-                                    onFrame: layout.onSurfaceHeight))
-            .clipShape(shape)
-            .panelGlass(in: shape)
-            // Asks for the whole window while one is held for a transition, so the
-            // hosting view never sizes the window back down to the surface mid-flight.
-            .frame(minHeight: layout.canvasHeight, maxHeight: .infinity, alignment: .top)
+        PanelHug {
+            content
+        }
+        .clipShape(shape)
+        .panelGlass(in: shape)
+        // Asks for the whole window while one is held, so the hosting view never
+        // sizes the window back down to the surface mid-flight.
+        .frame(minHeight: layout.canvasHeight, maxHeight: .infinity, alignment: .top)
     }
 }
 
-/// The surface's height on each frame of a transition.
+/// As tall as its content, up to the height on offer.
 ///
-/// Animatable so SwiftUI hands it every interpolated height rather than only the
-/// destination, which is all `onGeometryChange` reports, and the window needs each
-/// one to keep its shadow on the surface.
-private struct SurfaceHeight: ViewModifier, Animatable {
-    var height: CGFloat
-    var isHeld: Bool
-    var onFrame: ((CGFloat) -> Void)?
-
-    var animatableData: CGFloat {
-        get { height }
-        set { height = newValue }
+/// Below the screen's ceiling the surface is exactly its content, whatever the window
+/// around it; past it, the content's scroll view takes the height there is.
+private struct PanelHug: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let ideal = subview.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? ideal.width,
+                      height: min(ideal.height, proposal.height ?? ideal.height))
     }
 
-    func body(content: Content) -> some View {
-        if isHeld, let onFrame {
-            let height = height
-            DispatchQueue.main.async { onFrame(height) }
-        }
-        return content.frame(height: isHeld ? height : nil, alignment: .top)
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, anchor: .topLeading,
+                              proposal: ProposedViewSize(width: bounds.width, height: bounds.height))
     }
 }
 

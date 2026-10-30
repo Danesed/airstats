@@ -68,11 +68,6 @@ public struct HistoryChart: View {
 
     @State private var scrub: Scrub?
     @Environment(\.metricFormatter) private var formatter
-    /// Whether the module this chart sits in is still unfolding. Set by the panel;
-    /// false everywhere else, so previews and the renderer draw the plot at once.
-    @Environment(\.isDisclosureInProgress) private var isDisclosing
-    /// Whether this chart came into being mid-unfold. Only then does the plot wait.
-    @State private var appearedWhileDisclosing = false
 
     public init(_ module: ModuleHistory,
                 history: MetricHistory,
@@ -298,17 +293,6 @@ public struct HistoryChart: View {
                     .accessibilityHidden(true)
             }
         }
-        // The plot arrives after the rows, not with them.
-        //
-        // Revealed top-down with the rest of the detail, the grid and the trace swept
-        // past under the clip for the length of the unfold, and at 0.18s that read as
-        // a flicker rather than a reveal. The axis and the footer are text and unfold
-        // with the rows; the plot holds back until the height has settled and then
-        // fades in as one piece. A chart that was already on screen when some other
-        // module started unfolding is not touched.
-        .opacity(isDisclosing && appearedWhileDisclosing ? 0 : 1)
-        .animation(Design.Motion.respectingAccessibility(Design.Motion.chartReveal), value: isDisclosing)
-        .onAppear { appearedWhileDisclosing = isDisclosing }
     }
 
     /// One layer per mark rather than one drawing pass. See `PlotShape` for why this

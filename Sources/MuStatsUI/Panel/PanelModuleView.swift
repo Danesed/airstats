@@ -60,9 +60,7 @@ struct PanelModuleView: View {
     }
 
     var isExpanded: Bool {
-        let collapsed = layout?.collapsedModulesOverride
-            ?? settings.settings.panel.collapsedModules
-        return !collapsed.contains(module)
+        !settings.settings.panel.collapsedModules.contains(module)
     }
 
     /// What the panel fills its bars and core cells with.
@@ -113,7 +111,6 @@ struct PanelModuleView: View {
         }
         .padding(.vertical, Design.Space.xxs)
         .environment(\.metricFormatter, formatter)
-        .environment(\.isDisclosureInProgress, layout?.isDisclosureTransitionActive == true)
     }
 
     // MARK: Header
