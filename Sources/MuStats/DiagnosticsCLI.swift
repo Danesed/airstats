@@ -13,6 +13,13 @@ enum DiagnosticsCLI {
         let arguments = Array(CommandLine.arguments.dropFirst())
         guard let command = arguments.first else { return false }
         if CommandLineTool.run(arguments) { return true }
+        // A word that is not a command is a typo, not a request for the app: starting
+        // a second copy of the menu bar app from a terminal helps nobody. Flags are
+        // left alone, since the system and Xcode pass their own (-NSDocument…, -psn_…).
+        if !command.hasPrefix("-") {
+            FileHandle.standardError.write(Data("mustats: unknown command '\(command)'. Try 'mustats help'.\n".utf8))
+            exit(2)
+        }
 
         switch command {
         case "--probe":

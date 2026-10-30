@@ -188,6 +188,19 @@ public final class SamplingCore: @unchecked Sendable {
     /// a redraw paid once per menu bar AppKit mirrors the item into, and an idle
     /// machine's numbers are the ones least worth repainting every two seconds.
     static let quietCadenceMultiplier = 2.0
+    /// Quiet and also still: the CPU has moved less than `steadyBand` between this many
+    /// samples in a row. Nothing on the bar is changing, so it ticks slower again, and
+    /// the first sample that moves past the band brings the quiet rate straight back.
+    static let steadySamples = 5
+    static let steadyBand = 0.03
+    static let steadyCadenceMultiplier = 3.0
+    /// Temperatures move over tens of seconds, and the sensor read is the most
+    /// expensive one the menu bar pays for, so with only the bar on screen it is read
+    /// at a third of the rate. The panel and the widget get every sample.
+    static let thermalMenuBarMultiplier = 3.0
+    private var isSteady = false
+    private var steadyRun = 0
+    private var lastBusy: Double?
 
     /// A single settings transaction keeps interval, source selection and network
     /// lookup changes on one queue hop. This matters while a settings control emits
@@ -260,7 +273,7 @@ public final class SamplingCore: @unchecked Sendable {
             activity = newActivity
             // The panel and the widget always get the full rate; quiet is re-earned
             // from the next sample once only the menu bar is left.
-            if newActivity != .menuBar { isQuiet = false }
+            if newActivity != .menuBar { isQuiet = false; isSteady = false; steadyRun = 0 }
             rescheduleTimerLocked()
             // Coming back from suspension, sample immediately so the user never
             // sees a stale menu bar after unlocking the screen.
@@ -376,7 +389,7 @@ public final class SamplingCore: @unchecked Sendable {
         guard isRunning, activity.isSampling else { return }
 
         let interval = baseInterval * activity.cadenceMultiplier
-            * (isQuiet ? Self.quietCadenceMultiplier : 1)
+            * (isSteady ? Self.steadyCadenceMultiplier : (isQuiet ? Self.quietCadenceMultiplier : 1))
         let t = DispatchSource.makeTimerSource(queue: queue)
         // Generous leeway lets the kernel coalesce our wakeups with other timers.
         // This is the difference between "Very Low" and "Low" energy impact.
@@ -415,6 +428,9 @@ public final class SamplingCore: @unchecked Sendable {
         var changed = false
         func run<S: MetricSource>(_ slot: SourceSlot<S>) {
             var multiplier = thermalMultiplier(for: slot.identifier)
+            if slot.identifier == .thermal, activity < .desktopWidget {
+                multiplier *= Self.thermalMenuBarMultiplier
+            }
             // Processes are expensive. While the panel is open on an idle machine (< 6% CPU),
             // double the process cadence to avoid spending cycles re-enumerating idle PIDs.
             if slot.identifier == .processes, activity >= .panel {
@@ -485,10 +501,18 @@ public final class SamplingCore: @unchecked Sendable {
     /// at, and an occluded bar is already slowed further. Without a CPU reading the
     /// session is never quiet, since there is nothing to say it is idle.
     private func updateQuietLocked() {
-        let quiet = Self.isQuiet(activity: activity, busy: cpuSlot.state.value?.total.busy,
-                                 wasQuiet: isQuiet)
-        guard quiet != isQuiet else { return }
+        let busy = cpuSlot.state.value?.total.busy
+        let quiet = Self.isQuiet(activity: activity, busy: busy, wasQuiet: isQuiet)
+        if let busy, let last = lastBusy, quiet, abs(busy - last) < Self.steadyBand {
+            steadyRun += 1
+        } else {
+            steadyRun = 0
+        }
+        lastBusy = busy
+        let steady = quiet && steadyRun >= Self.steadySamples
+        guard quiet != isQuiet || steady != isSteady else { return }
         isQuiet = quiet
+        isSteady = steady
         rescheduleTimerLocked()
     }
 
