@@ -198,6 +198,13 @@ public final class SamplingCore: @unchecked Sendable {
     /// expensive one the menu bar pays for, so with only the bar on screen it is read
     /// at a third of the rate. The panel and the widget get every sample.
     static let thermalMenuBarMultiplier = 3.0
+    /// Live: once a second while the panel is open. Everything else, the menu bar on
+    /// its own included, keeps the user's interval and the quiet and steady slowdowns.
+    private var livePanel = true
+    static let liveInterval: TimeInterval = 1
+    private var effectiveBaseInterval: TimeInterval {
+        activity == .panel && livePanel ? min(baseInterval, Self.liveInterval) : baseInterval
+    }
     private var isSteady = false
     private var steadyRun = 0
     private var lastBusy: Double?
@@ -209,13 +216,17 @@ public final class SamplingCore: @unchecked Sendable {
         public let baseInterval: TimeInterval
         public let enabledSources: Set<CollectorID>
         public let publicIPLookupEnabled: Bool
+        /// Sample once a second while the panel is open, whatever the base interval.
+        public let livePanel: Bool
 
         public init(baseInterval: TimeInterval,
                     enabledSources: Set<CollectorID>,
-                    publicIPLookupEnabled: Bool) {
+                    publicIPLookupEnabled: Bool,
+                    livePanel: Bool = true) {
             self.baseInterval = baseInterval
             self.enabledSources = enabledSources
             self.publicIPLookupEnabled = publicIPLookupEnabled
+            self.livePanel = livePanel
         }
     }
 
@@ -388,7 +399,7 @@ public final class SamplingCore: @unchecked Sendable {
         timer = nil
         guard isRunning, activity.isSampling else { return }
 
-        let interval = baseInterval * activity.cadenceMultiplier
+        let interval = effectiveBaseInterval * activity.cadenceMultiplier
             * (isSteady ? Self.steadyCadenceMultiplier : (isQuiet ? Self.quietCadenceMultiplier : 1))
         let t = DispatchSource.makeTimerSource(queue: queue)
         // Generous leeway lets the kernel coalesce our wakeups with other timers.
@@ -407,6 +418,8 @@ public final class SamplingCore: @unchecked Sendable {
         let intervalChanged = clamped != baseInterval
         let publicIPChanged = configuration.publicIPLookupEnabled != publicIPLookupEnabled
 
+        let liveChanged = configuration.livePanel != livePanel
+        livePanel = configuration.livePanel
         baseInterval = clamped
         enabledSources = configuration.enabledSources
         publicIPLookupEnabled = configuration.publicIPLookupEnabled
@@ -416,7 +429,7 @@ public final class SamplingCore: @unchecked Sendable {
         if publicIPChanged {
             networkSlot.source.setPublicIPLookupEnabled(configuration.publicIPLookupEnabled)
         }
-        if intervalChanged { rescheduleTimerLocked() }
+        if intervalChanged || liveChanged { rescheduleTimerLocked() }
         if isRunning && (sourcesChanged || intervalChanged || publicIPChanged) { sampleLocked() }
     }
 
@@ -448,7 +461,7 @@ public final class SamplingCore: @unchecked Sendable {
             if slot.tick(now: now,
                          activity: activity,
                          isEnabled: enabledSources.contains(slot.identifier),
-                         baseInterval: baseInterval,
+                         baseInterval: effectiveBaseInterval,
                          didWakeFromSleep: didWake,
                          force: forced,
                          thermalCadenceMultiplier: multiplier) {

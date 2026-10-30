@@ -363,7 +363,8 @@ public final class MetricsEngine {
         let s = settingsStore.settings
         core?.apply(.init(baseInterval: s.general.updateInterval,
                           enabledSources: currentRequiredSources,
-                          publicIPLookupEnabled: s.general.fetchesPublicIP))
+                          publicIPLookupEnabled: s.general.fetchesPublicIP,
+                          livePanel: s.general.livePanel))
         // Turning the pause off has to resume sampling now, not at whatever UI
         // transition happens to call `updateActivity` next.
         updateActivity()

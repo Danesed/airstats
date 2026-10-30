@@ -31,6 +31,8 @@ struct GeneralPane: View {
                         Text(SettingsLabels.interval(interval)).tag(interval)
                     }
                 }
+                Toggle("Live updates while the panel is open",
+                       isOn: settings.binding(\.general.livePanel))
                 Toggle("Slow down when the menu bar is hidden",
                        isOn: settings.binding(\.general.throttlesWhenOccluded))
                 Toggle("Pause sampling on Low Power Mode",

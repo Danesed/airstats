@@ -421,3 +421,4 @@
 "μStats, load %@, all normal" = "μStats, carico %@, tutto normale";
 "μStats, load %@, needs attention" = "μStats, carico %@, richiede attenzione";
 "μStats, load %@, under heavy load" = "μStats, carico %@, sotto forte carico";
+"Live updates while the panel is open" = "Aggiornamento in tempo reale con il pannello aperto";

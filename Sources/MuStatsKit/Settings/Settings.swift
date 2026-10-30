@@ -1001,6 +1001,9 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
     public var throttlesWhenOccluded: Bool
     /// Suspend sampling entirely while on battery below a threshold.
     public var pausesOnLowPower: Bool
+    /// Once a second while the panel is open, so its details are live. Off, the panel
+    /// keeps the same pace as the menu bar.
+    public var livePanel: Bool
     /// Fetch the public IP address. One of the two features that leave the machine,
     /// the other being Sparkle's update check, which keeps its own preference.
     public var fetchesPublicIP: Bool
@@ -1015,6 +1018,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
                 showsPercentSign: Bool = true,
                 throttlesWhenOccluded: Bool = true,
                 pausesOnLowPower: Bool = false,
+                livePanel: Bool = true,
                 fetchesPublicIP: Bool = false,
                 showsDockIcon: Bool = false) {
         self.updateInterval = updateInterval
@@ -1026,6 +1030,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         self.showsPercentSign = showsPercentSign
         self.throttlesWhenOccluded = throttlesWhenOccluded
         self.pausesOnLowPower = pausesOnLowPower
+        self.livePanel = livePanel
         self.fetchesPublicIP = fetchesPublicIP
         self.showsDockIcon = showsDockIcon
     }
@@ -1034,7 +1039,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case updateInterval, launchAtLogin, appearance, temperatureUnit, networkRateUnit
-        case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower
+        case byteUnitStyle, showsPercentSign, throttlesWhenOccluded, pausesOnLowPower, livePanel
         case fetchesPublicIP, showsDockIcon
     }
 
@@ -1049,6 +1054,7 @@ public struct GeneralSettings: Sendable, Codable, Equatable {
         showsPercentSign = c.value(.showsPercentSign, or: true)
         throttlesWhenOccluded = c.value(.throttlesWhenOccluded, or: true)
         pausesOnLowPower = c.value(.pausesOnLowPower, or: false)
+        livePanel = c.value(.livePanel, or: true)
         fetchesPublicIP = c.value(.fetchesPublicIP, or: false)
         showsDockIcon = c.value(.showsDockIcon, or: false)
     }
