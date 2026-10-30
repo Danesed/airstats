@@ -46,9 +46,11 @@ struct PanelLiveChip: View {
         let cores = Self.cores(cpu)
         return HStack(spacing: 8) {
             VStack(spacing: 8) {
-                cluster("P-cores", loads: cores.performance,
-                        columns: Self.columns(for: cores.performance.count), cell: 28)
-                cluster("E-cores", loads: cores.efficiency, columns: 4, cell: 18)
+                cluster("P-cores", loads: cores.performance, maxCell: 28)
+                // A Mac with one kind of core (Intel) has no efficiency cluster to draw.
+                if !cores.efficiency.isEmpty {
+                    cluster("E-cores", loads: cores.efficiency, maxCell: 18)
+                }
             }
             VStack(spacing: 8) {
                 gpuBlock(gpu)
@@ -72,16 +74,20 @@ struct PanelLiveChip: View {
         .accessibilityLabel(accessibilitySummary(cpu: cpu, gpu: gpu, memory: memory))
     }
 
-    private func cluster(_ title: String, loads: [Double], columns: Int, cell: CGFloat) -> some View {
+    private func cluster(_ title: String, loads: [Double], maxCell: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             blockTitle(title, loads.isEmpty ? nil : formatter.percent(loads.reduce(0, +) / Double(loads.count)))
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(cell), spacing: 5), count: columns),
-                      alignment: .leading, spacing: 5) {
-                ForEach(Array(loads.enumerated()), id: \.offset) { _, load in
-                    coreCell(load: load, size: cell)
+            // Sized to the block, so four cores draw large and an Ultra's twenty-four
+            // still fit, smaller, without being cut off.
+            GeometryReader { proxy in
+                let fit = Self.fit(count: loads.count, in: proxy.size, gap: 4, maxCell: maxCell)
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(fit.cell), spacing: 4), count: fit.columns),
+                          alignment: .leading, spacing: 4) {
+                    ForEach(Array(loads.enumerated()), id: \.offset) { _, load in
+                        coreCell(load: load, size: fit.cell)
+                    }
                 }
             }
-            Spacer(minLength: 0)
         }
         .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -90,18 +96,21 @@ struct PanelLiveChip: View {
 
     private func gpuBlock(_ gpu: GPUDevice?) -> some View {
         let load = gpu?.utilization ?? 0
-        let count = min(max(gpu?.coreCount ?? 10, 4), 40)
+        // Every core the GPU reports, up to an Ultra's eighty; ten where it reports none.
+        let count = min(max(gpu?.coreCount ?? 10, 1), 80)
         return VStack(alignment: .leading, spacing: 5) {
             blockTitle("GPU", gpu?.utilization.map { formatter.percent($0) })
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 3), count: count > 20 ? 8 : 5),
-                      spacing: 3) {
-                ForEach(0..<count, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(Self.teal.opacity(0.12 + 0.88 * load))
-                        .frame(height: 10)
+            GeometryReader { proxy in
+                let fit = Self.fit(count: count, in: proxy.size, gap: 3, maxCell: 14)
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(fit.cell), spacing: 3), count: fit.columns),
+                          alignment: .leading, spacing: 3) {
+                    ForEach(0..<count, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: fit.cell > 8 ? 2 : 1, style: .continuous)
+                            .fill(Self.teal.opacity(0.12 + 0.88 * load))
+                            .frame(width: fit.cell, height: fit.cell)
+                    }
                 }
             }
-            Spacer(minLength: 0)
         }
         .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -174,7 +183,6 @@ struct PanelLiveChip: View {
             RoundedRectangle(cornerRadius: 2).fill(Self.teal).frame(width: 10, height: 10)
             Text("busy")
             Spacer()
-            Text("A schematic, lit by the live readings")
         }
         .font(Design.Text.caption)
         .foregroundStyle(Design.Palette.tertiaryText)
@@ -182,15 +190,20 @@ struct PanelLiveChip: View {
 
     // MARK: Data
 
-    /// Two across for four cores, three for six, four beyond: the cluster stays a
-    /// block rather than a column, with no lone core on a row of its own where it
-    /// can be helped.
-    static func columns(for count: Int) -> Int {
-        switch count {
-        case ...4: return 2
-        case 5...6: return 3
-        default: return 4
+    /// The largest square cell, up to `maxCell`, at which `count` cells fit in `size`,
+    /// and the columns that gives. Tried for every column count, so four cores come
+    /// out as a large two-by-two and twenty-four as a tighter grid of small ones.
+    static func fit(count: Int, in size: CGSize, gap: CGFloat, maxCell: CGFloat) -> (columns: Int, cell: CGFloat) {
+        guard count > 0, size.width > 0, size.height > 0 else { return (1, 0) }
+        var best = (columns: 1, cell: CGFloat(0))
+        for columns in 1...count {
+            let rows = (count + columns - 1) / columns
+            let byWidth = (size.width - CGFloat(columns - 1) * gap) / CGFloat(columns)
+            let byHeight = (size.height - CGFloat(rows - 1) * gap) / CGFloat(rows)
+            let cell = min(byWidth, byHeight, maxCell).rounded(.down)
+            if cell > best.cell { best = (columns, cell) }
         }
+        return best
     }
 
     /// Per-core busy fractions split by kind. A Mac that does not report kinds puts

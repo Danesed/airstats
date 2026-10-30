@@ -551,3 +551,20 @@ struct MenuBarStabilizerTests {
         #expect(big.items[0].level == 0.40)
     }
 }
+
+@Suite("The live chip fits any chip")
+struct LiveChipFitTests {
+    @Test("four cores draw large, an Ultra's many still fit")
+    func fit() {
+        let block = CGSize(width: 140, height: 130)
+        let small = PanelLiveChip.fit(count: 4, in: block, gap: 4, maxCell: 28)
+        #expect(small.cell == 28)
+        let ultra = PanelLiveChip.fit(count: 24, in: block, gap: 4, maxCell: 28)
+        let rows = (24 + ultra.columns - 1) / ultra.columns
+        #expect(ultra.cell > 0)
+        #expect(CGFloat(ultra.columns) * ultra.cell + CGFloat(ultra.columns - 1) * 4 <= block.width)
+        #expect(CGFloat(rows) * ultra.cell + CGFloat(rows - 1) * 4 <= block.height)
+        let gpu = PanelLiveChip.fit(count: 80, in: CGSize(width: 140, height: 90), gap: 3, maxCell: 14)
+        #expect(gpu.cell >= 5)
+    }
+}
